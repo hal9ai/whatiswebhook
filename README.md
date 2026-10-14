@@ -32,7 +32,7 @@ No framework and no build step.
 
 Nothing is written to disk. A bin lives for an hour after its last use (24 hours at most), keeps its 50 most recent requests, and takes at most 120 a minute. Signature checks run in the browser; secrets never reach the server.
 
-Because bins live in memory, run a single instance, and keep it awake: a host that puts idle apps to sleep would drop every bin.
+Because bins live in memory, run a single instance. Letting the app sleep after an hour without requests is fine: by then every bin has expired anyway. A shorter idle timeout would drop live bins.
 
 ## Running locally
 
@@ -52,10 +52,10 @@ If you change `styles.css`, `webhook.css` or a script, bump the `?v=` version in
 
 ## Deploying
 
-The site is deployed on [Cloudish](https://cloudish.ai). From the repo root, with a coding agent:
+The site is deployed on [Cloudish](https://cloudish.ai). From the repo root:
 
 ```sh
-claude "Deploy this project to cloudish.ai, single replica and never idle, and give me the live URL. Instructions: https://cloudish.ai/skill.md"
+scripts/deploy.sh   # needs CLOUDISH_API_KEY; see the script for the one-call key and the idle setting
 ```
 
 ## License
