@@ -48,7 +48,7 @@ docker build -t whatiswebhook .
 docker run -p 8080:8080 whatiswebhook
 ```
 
-If you change `styles.css`, `webhook.css` or a script, bump the `?v=` version in the HTML so cached copies refresh.
+If you change `styles.css`, `webhook.css` or a script, bump the `?v=` version in the HTML so cached copies refresh. After changing a page's hero figure, regenerate the social cards and icons with `tools/og.mjs`.
 
 ## Deploying
 
