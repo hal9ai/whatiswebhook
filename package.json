@@ -1,0 +1,13 @@
+{
+  "name": "whatiswebhook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A visual field guide to webhooks, with a live webhook tester.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  }
+}
