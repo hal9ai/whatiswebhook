@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webhook Not Working? Fix Failed, Missing &amp; Timed-Out Webhooks (Stripe, GitHub, Shopify, Slack)</title>
+<meta name="description" content="Webhook not received, or failing with a timeout, 401, 403, 404, 500 or TLS error? Where Stripe, GitHub, Shopify and Slack log each delivery, what every status means, and how to fix it.">
+<link rel="canonical" href="https://whatiswebhook.com/webhook-not-working.html">
+<meta name="theme-color" content="#f5f8fd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#061633" media="(prefers-color-scheme: dark)">
+<script src="/theme.js"></script>
+<link rel="preload" href="/fonts/space-grotesk-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-sans-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=1.0.0">
+<link rel="stylesheet" href="/webhook.css?v=1.0.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="whatiswebhook.com">
+<meta property="og:title" content="Webhook not working? Read the delivery log">
+<meta property="og:description" content="Where Stripe, GitHub, Shopify and Slack log each delivery, what every status and timeout means, and the fix for each.">
+<meta property="og:url" content="https://whatiswebhook.com/webhook-not-working.html">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "@id": "https://whatiswebhook.com/webhook-not-working.html#article",
+      "headline": "Webhook not working? How to find the cause",
+      "description": "A failed webhook almost always leaves a line in the provider's delivery log. Where Stripe, GitHub, Shopify and Slack keep that log, what each status and error means, and how to fix it.",
+      "url": "https://whatiswebhook.com/webhook-not-working.html",
+      "datePublished": "2026-10-14",
+      "dateModified": "2026-10-14",
+      "inLanguage": "en",
+      "isPartOf": { "@type": "WebSite", "name": "whatiswebhook.com", "url": "https://whatiswebhook.com/" },
+      "about": [
+        { "@type": "Thing", "name": "Webhook" },
+        { "@type": "Thing", "name": "List of HTTP status codes" },
+        { "@type": "Thing", "name": "Troubleshooting" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://whatiswebhook.com/webhook-not-working.html#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Why is my webhook not being received?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Open the provider's delivery log. If there is no delivery attempt at all, the event happened somewhere the endpoint doesn't listen: another account, repository or sandbox, an event type you didn't subscribe to, or an endpoint that is disabled. If there is an attempt with an error, the error names the step that failed: DNS, connection, TLS, an HTTP status from your server, or a timeout." }
+        },
+        {
+          "@type": "Question",
+          "name": "Why does Stripe say my webhook failed?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Stripe counts anything other than a 2xx as a failure, including redirects. Open Workbench, select the endpoint under Webhooks, and open the Event deliveries tab to see the status of each attempt. Unable to connect means Stripe couldn't reach your server, TLS error means a certificate problem, Timed out means you answered too slowly, and a 4xx or 5xx came from your own server." }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I redeliver a failed GitHub webhook?",
+          "acceptedAnswer": { "@type": "Answer", "text": "GitHub doesn't retry failed deliveries on its own. In the repository, go to Settings, Webhooks, click the webhook's URL, open Recent Deliveries, click the delivery and press Redeliver. You can also use the REST API: POST /repos/{owner}/{repo}/hooks/{hook_id}/deliveries/{delivery_id}/attempts. Deliveries from the past 3 days can be redelivered." }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the webhook timeout for Stripe, GitHub, Shopify and Slack?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Slack expects a 2xx within 3 seconds, Shopify within 5 seconds (and 1 second to connect), and GitHub within 10 seconds. Stripe doesn't publish a number; it says to return a 2xx before any complex logic. Answer first, then do the work in the background." }
+        },
+        {
+          "@type": "Question",
+          "name": "Why do I receive the same webhook more than once?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Providers retry when they don't see a 2xx in time, and even successful deliveries can occasionally repeat. Record the event ID you've processed (Stripe's event id, X-GitHub-Delivery, X-Shopify-Webhook-Id) and skip it the next time, while still answering 200." }
+        },
+        {
+          "@type": "Question",
+          "name": "Why does my webhook endpoint return 401 or 403?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Something rejected the request before or inside your handler: CSRF protection on the POST route, login or basic auth in front of the app, a firewall or bot protection, or your own signature check failing. Exempt the webhook route from CSRF and login, allow the provider through the firewall, and check the signing secret." }
+        },
+        {
+          "@type": "Question",
+          "name": "What happens if my webhook endpoint keeps failing?",
+          "acceptedAnswer": { "@type": "Answer", "text": "It can be switched off. Shopify deletes subscriptions created through the Admin API after 8 consecutive failures. Slack temporarily disables event subscriptions when more than 95% of deliveries fail within 60 minutes, for apps receiving at least 1,000 events an hour, and emails the app owner. Stripe doesn't resend events generated while an endpoint is disabled, so recover them from the Events API." }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--stroke-2);stroke-width:1"/></pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--stroke)"/></marker>
+    <marker id="arr-sig" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--signal)"/></marker>
+    <marker id="arr-ok" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--ok)"/></marker>
+  </defs>
+</svg>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <a class="logo" href="/" aria-label="whatiswebhook.com home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><g class="logo-loop"><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg>
+      <span class="logo-text">whatis<b>webhook</b></span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Chapters">
+      <a href="/"><span class="n">01</span>Webhooks</a>
+      <a href="/test-webhook-locally.html"><span class="n">02</span>Test locally</a>
+      <a href="/webhook-not-working.html" aria-current="page"><span class="n">03</span>Troubleshoot</a>
+      <a href="/verify-webhook-signatures.html"><span class="n">04</span>Signatures</a>
+      <a href="/deploy-webhook-receiver.html"><span class="n">05</span>Deploy</a>
+    </nav>
+    <div class="masthead-actions">
+      <button class="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to dark blueprint theme"><span class="knob" aria-hidden="true"></span><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7L7 17M17 7l1.7-1.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/webhook-tester.html">Webhook tester</a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="bars" aria-hidden="true"></span>Menu</button>
+    </div>
+  </div>
+  <div class="progress" aria-hidden="true"><span></span></div>
+</header>
+
+<main id="main">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="kicker"><span class="tag">CH. 03</span> A field guide · when the delivery fails</p>
+      <h1>Webhook <span class="hl">not working</span>?</h1>
+      <p class="lede">A webhook that never arrives almost always left a trace: a line in the provider's delivery log with a status code, an error or a timeout. Here's where Stripe, GitHub, Shopify and Slack keep that line, what each status means, and the fix for each one.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#statuses">Look up your status code <span class="arr" aria-hidden="true">↓</span></a>
+        <a class="btn" href="#delivery-log">Find the delivery log</a>
+      </div>
+      <dl class="readouts">
+        <div><dt>Failure points</dt><dd>7</dd></div>
+        <div><dt>Shortest wait</dt><dd>3 <small>s</small></dd></div>
+        <div><dt>GitHub retries</dt><dd>None</dd></div>
+      </dl>
+    </div>
+
+    <figure class="fig hero-fig corners" data-crosshair>
+      <div class="fig-bar"><span><b>Fig. 01</b> — the life of one delivery, and where it breaks</span><span class="live">Live</span></div>
+      <svg class="dg anim" viewBox="0 0 600 450" role="img" aria-labelledby="f1t f1d">
+        <title id="f1t">The seven steps of a webhook delivery and what the log says when each one fails</title>
+        <desc id="f1d">A delivery passes seven steps from top to bottom. One, DNS: the hostname must resolve, or the log says failed to connect to host. Two, connect to port 443: the server must be up and reachable, or the log says unable to connect. Three, the TLS handshake: the certificate must be valid with a full chain, or the log shows a TLS error. Four, the proxy and framework must route the POST to the handler, or the log shows a redirect, 403, 404, 405 or 413. Five, the signature check must pass, or the handler answers 400 or 401. Six, your code must not crash, or the log shows 500, 502 or 503. Seven, the answer must arrive before the deadline: 3 seconds for Slack, 5 for Shopify, 10 for GitHub, or the log says timed out. Only a 2xx in time counts as delivered.</desc>
+        <text class="tx-3" x="62" y="26">STEP</text>
+        <text class="tx-3" x="290" y="26">IF IT FAILS, THE LOG SAYS</text>
+        <path class="ln-3" d="M20 36 H580"/>
+
+        <!-- spine -->
+        <path class="ln-2" d="M36 58 V418"/>
+        <path id="spine" d="M36 50 V418" fill="none"/>
+
+        <!-- 1 DNS -->
+        <circle class="bg" cx="36" cy="66" r="10"/><circle class="ln" cx="36" cy="66" r="10"/><text class="tx-2 mid" x="36" y="70">1</text>
+        <rect class="bg" x="58" y="48" width="208" height="38" rx="7"/><rect class="ln" x="58" y="48" width="208" height="38" rx="7"/>
+        <text class="tx" x="70" y="64">DNS lookup</text>
+        <text class="tx-2" x="70" y="79">hooks.example.com → IP</text>
+        <path class="ln-err dash" d="M266 67 H282"/>
+        <text class="lbl-err" x="290" y="63">✕ FAILED TO CONNECT TO HOST</text>
+        <text class="tx-2" x="290" y="79">typo, no record, or localhost</text>
+
+        <!-- 2 connect -->
+        <circle class="bg" cx="36" cy="114" r="10"/><circle class="ln" cx="36" cy="114" r="10"/><text class="tx-2 mid" x="36" y="118">2</text>
+        <rect class="bg" x="58" y="96" width="208" height="38" rx="7"/><rect class="ln" x="58" y="96" width="208" height="38" rx="7"/>
+        <text class="tx" x="70" y="112">Connect to :443</text>
+        <text class="tx-2" x="70" y="127">server up, port reachable</text>
+        <path class="ln-err dash" d="M266 115 H282"/>
+        <text class="lbl-err" x="290" y="111">✕ UNABLE TO CONNECT</text>
+        <text class="tx-2" x="290" y="127">server down, firewall, wrong port</text>
+
+        <!-- 3 TLS -->
+        <circle class="bg" cx="36" cy="162" r="10"/><circle class="ln" cx="36" cy="162" r="10"/><text class="tx-2 mid" x="36" y="166">3</text>
+        <rect class="bg" x="58" y="144" width="208" height="38" rx="7"/><rect class="ln" x="58" y="144" width="208" height="38" rx="7"/>
+        <text class="tx" x="70" y="160">TLS handshake</text>
+        <text class="tx-2" x="70" y="175">valid cert, full chain</text>
+        <path class="ln-err dash" d="M266 163 H282"/>
+        <text class="lbl-err" x="290" y="159">✕ TLS ERROR · SSL_ERROR</text>
+        <text class="tx-2" x="290" y="175">expired, self-signed, no intermediate</text>
+
+        <!-- 4 proxy & framework -->
+        <circle class="bg" cx="36" cy="210" r="10"/><circle class="ln" cx="36" cy="210" r="10"/><text class="tx-2 mid" x="36" y="214">4</text>
+        <rect class="bg-blue" x="58" y="192" width="208" height="38" rx="7"/><rect class="ln" x="58" y="192" width="208" height="38" rx="7"/>
+        <text class="tx" x="70" y="208">Proxy &amp; framework</text>
+        <text class="tx-2" x="70" y="223">POST reaches /webhook</text>
+        <path class="ln-err dash" d="M266 211 H282"/>
+        <text class="lbl-err" x="290" y="207">✕ 3XX · 403 · 404 · 405 · 413</text>
+        <text class="tx-2" x="290" y="223">redirect, CSRF, WAF, path, size</text>
+
+        <!-- 5 signature -->
+        <circle class="bg" cx="36" cy="258" r="10"/><circle class="ln" cx="36" cy="258" r="10"/><text class="tx-2 mid" x="36" y="262">5</text>
+        <rect class="bg-blue" x="58" y="240" width="208" height="38" rx="7"/><rect class="ln" x="58" y="240" width="208" height="38" rx="7"/>
+        <text class="tx" x="70" y="256">Signature check</text>
+        <text class="tx-2" x="70" y="271">raw body, right secret</text>
+        <path class="ln-err dash" d="M266 259 H282"/>
+        <text class="lbl-err" x="290" y="255">✕ 400 · 401</text>
+        <text class="tx-2" x="290" y="271">parsed body or wrong secret</text>
+
+        <!-- 6 your code -->
+        <circle class="bg" cx="36" cy="306" r="10"/><circle class="ln" cx="36" cy="306" r="10"/><text class="tx-2 mid" x="36" y="310">6</text>
+        <rect class="bg-blue" x="58" y="288" width="208" height="38" rx="7"/><rect class="ln" x="58" y="288" width="208" height="38" rx="7"/>
+        <text class="tx" x="70" y="304">Your code</text>
+        <text class="tx-2" x="70" y="319">runs without an exception</text>
+        <path class="ln-err dash" d="M266 307 H282"/>
+        <text class="lbl-err" x="290" y="303">✕ 500 · 502 · 503</text>
+        <text class="tx-2" x="290" y="319">a bug, a crash, a deploy</text>
+
+        <!-- 7 in time -->
+        <circle class="bg" cx="36" cy="354" r="10"/><circle class="ln" cx="36" cy="354" r="10"/><text class="tx-2 mid" x="36" y="358">7</text>
+        <rect class="bg-blue" x="58" y="336" width="208" height="38" rx="7"/><rect class="ln" x="58" y="336" width="208" height="38" rx="7"/>
+        <text class="tx" x="70" y="352">Answer in time</text>
+        <text class="tx-2" x="70" y="367">2xx before the deadline</text>
+        <path class="ln-err dash" d="M266 355 H282"/>
+        <text class="lbl-err" x="290" y="351">✕ TIMED OUT</text>
+        <text class="tx-2" x="290" y="367">Slack 3 s · Shopify 5 s · GitHub 10 s</text>
+
+        <!-- delivered -->
+        <path class="ln-3" d="M20 390 H580"/>
+        <circle class="f-ok" cx="36" cy="418" r="10"/><path d="M31 418 l3.5 3.5 l6 -7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text class="lbl-ok" x="58" y="414">✓ 2XX IN TIME: DELIVERED</text>
+        <text class="tx-3" x="58" y="432">ANYTHING ELSE: STRIPE, SHOPIFY, SLACK RETRY · GITHUB WAITS FOR YOU</text>
+
+        <g class="pkt"><circle class="pkt-halo" r="10"/><circle class="pkt-core" r="4.6"/>
+          <animateMotion dur="6s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.75;1" calcMode="linear"><mpath href="#spine"/></animateMotion>
+          <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;.75;.77;1" dur="6s" repeatCount="indefinite"/>
+        </g>
+      </svg>
+      <figcaption>Steps 1 to 3 happen before your code exists for the request, so your app logs show nothing; only the provider's log does. Steps 4 to 7 (<span style="color:var(--blue)">blue</span>) happen on your server, so your own logs should have a line for each attempt. Which half you're in tells you where to look.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ QUICK ANSWER ============ -->
+<section class="section section-tight" id="quick-answer" aria-labelledby="qa-h">
+  <div class="wrap split split-wide">
+    <div class="reveal">
+      <p class="eyebrow"><span class="idx">§ 01</span> The short answer</p>
+      <h2 id="qa-h">Fixing a webhook, in one paragraph</h2>
+      <div class="answer">
+        <span class="answer-label">Quick answer</span>
+        <p><strong>Open the provider's delivery log first.</strong> If it shows <em>no attempt at all</em>, the event happened somewhere your endpoint doesn't listen: another account, repository or sandbox, an event type you didn't subscribe to, or an endpoint that's switched off. If it shows <em>an attempt with an error</em>, the error names the step: no connection means DNS, a firewall or a server that's down; a TLS error means your certificate; a status code came from your server; a timeout means you answered too slowly.</p>
+        <p>Fix that one step, then redeliver from the log. To see what a failure looks like before it happens for real, point a sandbox at the <a href="/webhook-tester.html">webhook tester</a>, set it to answer <code>500</code> or to wait 10 seconds, and watch the provider retry.</p>
+      </div>
+    </div>
+    <div class="reveal reveal-d1">
+      <p class="eyebrow"><span class="idx">Spec sheet</span> Key facts</p>
+      <dl class="facts">
+        <dt>Look here first</dt><dd>The provider's delivery log, not your app's</dd>
+        <dt>Success means</dt><dd>A 2xx status. Stripe and Shopify count redirects as failures</dd>
+        <dt>Deadline</dt><dd>Slack 3 s · Shopify 5 s · GitHub 10 s · Stripe "quickly"</dd>
+        <dt>Retries</dt><dd>Stripe up to 3 days (live) · Shopify 8 times in 4 h · Slack 3 times · GitHub none</dd>
+        <dt>Redeliver by hand</dt><dd>Stripe 15 days (Dashboard), 30 (CLI) · GitHub 3 days</dd>
+        <dt>Switched off</dt><dd>Shopify: after 8 failures in a row · Slack: over 95% failing in an hour</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DELIVERY LOG ============ -->
+<section class="section section-rule" id="delivery-log" aria-labelledby="log-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 02</span> Step one</p>
+      <h2 id="log-h">Read the delivery log first</h2>
+      <p>Every provider except Slack keeps a record of each attempt: when it went out, what it sent, and what your server answered. It's the only witness for steps 1 to 3, when your server never saw the request. Here's where each one keeps it, checked against their documentation in October 2026.</p>
+    </div>
+    <div class="cards cards-2x">
+      <article class="card reveal">
+        <span class="card-idx">Stripe · retries up to 3 days in live mode</span>
+        <h3>Workbench → Webhooks → Event deliveries</h3>
+        <p>Open the <a href="https://dashboard.stripe.com/webhooks" rel="noopener">Webhooks tab</a> in Workbench, select the endpoint, then the <strong>Event deliveries</strong> tab. Each event is <code>Delivered</code>, <code>Pending</code> or <code>Failed</code>; click one to see each attempt's HTTP status and when the next retry is due.</p>
+        <p><strong>Redeliver:</strong> click <strong>Resend</strong> on the event (up to 15 days after it was created), or use the Stripe CLI (up to 30 days):</p>
+        <div class="cmd"><span class="p">$</span><code>stripe events resend evt_… --webhook-endpoint=we_…</code></div>
+        <p class="fineprint">A manual resend doesn't cancel the automatic retries, even if it succeeds. Answer 200 to events you've already handled to stop them.</p>
+      </article>
+      <article class="card reveal reveal-d1">
+        <span class="card-idx">GitHub · no automatic retries</span>
+        <h3>Settings → Webhooks → Recent Deliveries</h3>
+        <p>In the repository or organization, open <strong>Settings</strong>, then <strong>Webhooks</strong>, click the webhook's URL and open <strong>Recent Deliveries</strong>. Each delivery shows the headers and payload GitHub sent and the response it got. The list covers the past 3 days.</p>
+        <p><strong>Redeliver:</strong> click the delivery's GUID, then <strong>Redeliver</strong>. Or call the REST API, here through the GitHub CLI:</p>
+        <div class="cmd"><span class="p">$</span><code>gh api -X POST repos/OWNER/REPO/hooks/HOOK_ID/deliveries/DELIVERY_ID/attempts</code></div>
+        <p class="fineprint">Only repository admins (or organization owners) can redeliver. If the webhook isn't active, the Recent Deliveries section isn't shown at all.</p>
+      </article>
+      <article class="card reveal">
+        <span class="card-idx">Shopify · retries 8 times in 4 hours</span>
+        <h3>Dev Dashboard → your app → Logs</h3>
+        <p>In the Dev Dashboard, open <strong>Apps</strong> and your app. <strong>Logs</strong> in the sidebar lists individual deliveries from the past 7 days with the status your app returned. The <strong>Overview</strong> page's Operations card charts the failed delivery rate and the 90th-percentile response time.</p>
+        <p><strong>Redeliver:</strong> Shopify documents no button for it. Trigger the event again in a development store, for example by creating a product for <code>products/create</code>.</p>
+        <p class="fineprint">Logs can lag by several minutes, and at high volume they show only a sample of successful deliveries.</p>
+      </article>
+      <article class="card reveal reveal-d1">
+        <span class="card-idx">Slack · retries 3 times</span>
+        <h3>No delivery log: read the retry headers</h3>
+        <p>Slack's docs describe no per-delivery log. What you get is in the retries themselves: each one carries <code>x-slack-retry-num</code> (1, 2 or 3) and <code>x-slack-retry-reason</code>, such as <code>http_timeout</code>, <code>http_error</code>, <code>ssl_error</code>, <code>connection_failed</code> or <code>too_many_redirects</code>.</p>
+        <p><strong>Check the URL:</strong> on the app's <strong>Event Subscriptions</strong> page, Slack verifies the Request URL with a <code>url_verification</code> challenge before you can save it. If your server was slow to wake up, click <strong>Retry</strong>.</p>
+        <p class="fineprint">Log every request's headers, so the retry reason is there when you need it.</p>
+      </article>
+    </div>
+    <div class="note reveal" style="margin-top:28px"><span class="note-label">No log entry at all?</span>Then the provider never tried, and nothing on your server can be the cause. Skip to <a href="#never-arrives">it never arrives</a>. GitHub also notes that deliveries can take a few minutes to appear, so give it a moment before you conclude that.</div>
+  </div>
+</section>
+
+<!-- ============ STATUS TABLE ============ -->
+<section class="section section-rule" id="statuses" aria-labelledby="st-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 03</span> Decode the log</p>
+      <h2 id="st-h">What each status or error means</h2>
+      <p>Find what the provider saw in the first column. Providers word the network errors differently; the second column has their exact phrases, so you can search this page for yours.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead><tr><th scope="col">The provider saw</th><th scope="col">How it's worded</th><th scope="col">Likely cause</th><th scope="col">Fix</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">No connection</th><td>Stripe <em>(Unable to connect)</em> · GitHub <em>failed to connect to host</em>, <em>failed to connect to network</em> · Slack <code>connection_failed</code></td><td>The hostname doesn't resolve, the URL says <code>localhost</code>, the server is down, or a firewall drops the connection</td><td><a href="#never-arrives">Check DNS and the URL</a>; <a href="#firewall">allow the provider's IPs</a></td></tr>
+          <tr><th scope="row">Timed out</th><td>Stripe <em>(Timed out)</em> · GitHub <em>timed out</em> · Slack <code>http_timeout</code></td><td>Your handler does its work before it answers, or the server was asleep</td><td><a href="#timeouts">Answer first, work later</a></td></tr>
+          <tr><th scope="row">TLS error</th><td>Stripe <em>(TLS error)</em> · GitHub <em>Peer certificate cannot be authenticated with given CA certificates</em> · Slack <code>ssl_error</code></td><td>Expired or self-signed certificate, a missing intermediate certificate, or (Stripe) TLS older than 1.2</td><td><a href="#tls">Fix the certificate chain</a></td></tr>
+          <tr><th scope="row"><code>301</code> <code>302</code> <code>307</code> <code>308</code></th><td>Stripe <em>(302) ERR</em> · Slack <code>too_many_redirects</code></td><td><code>http</code> → <code>https</code>, <code>www</code>, or a trailing slash redirect</td><td><a href="#redirects">Register the final URL</a></td></tr>
+          <tr><th scope="row"><code>400</code></th><td>Stripe <em>(400) ERR</em> · GitHub <em>invalid HTTP response</em>, for any 4xx or 5xx · Slack <code>http_error</code></td><td>Your code rejected the body: usually a failed signature check, sometimes a JSON parser meeting a form-encoded body</td><td><a href="#signature">Check the signature setup</a></td></tr>
+          <tr><th scope="row"><code>401</code> <code>403</code></th><td>Stripe <em>(403) ERR</em>, which it calls an access restriction</td><td>CSRF protection, a login or basic-auth wall, a WAF or bot challenge, or your signature check</td><td><a href="#blocked">Let the route through</a></td></tr>
+          <tr><th scope="row"><code>404</code></th><td>Stripe <em>(404) ERR</em>; the others show the code</td><td>Wrong path, a route that isn't deployed, a tunnel URL that changed, or the wrong case (Slack URLs are case-sensitive)</td><td>Copy the URL from your router, not from memory</td></tr>
+          <tr><th scope="row"><code>405</code></th><td>Stripe <em>(405) ERR</em>; the others show the code</td><td>The route exists but doesn't accept <code>POST</code></td><td>Accept <code>POST</code> on the webhook route</td></tr>
+          <tr><th scope="row"><code>413</code></th><td>Stripe <em>(413) ERR</em>; the others show the code</td><td>The body is bigger than your proxy or framework allows</td><td><a href="#too-large">Raise the limit for that route</a></td></tr>
+          <tr><th scope="row"><code>429</code></th><td>Stripe <em>(429) ERR</em>; the others show the code</td><td>Your own rate limiter or WAF throttles the provider during a burst</td><td>Exempt the webhook route; queue the work</td></tr>
+          <tr><th scope="row"><code>500</code></th><td>Stripe <em>(500) ERR</em>; the others show the code</td><td>An exception in your handler</td><td><a href="#server-errors">Read your app's logs</a></td></tr>
+          <tr><th scope="row"><code>502</code> <code>503</code> <code>504</code></th><td>Stripe <em>(502) ERR</em>; the others show the code</td><td>Your proxy or host couldn't get an answer from the app: crashed, restarting, listening on another port, or mid-deploy</td><td><a href="#server-errors">Check the app is up behind the proxy</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">Stripe's wording is from its <a href="https://docs.stripe.com/events/manage-webhook-endpoints#debugging" rel="noopener">delivery status table</a>, GitHub's from <a href="https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/troubleshooting-webhooks" rel="noopener">Troubleshooting webhooks</a>, Slack's from the <a href="https://docs.slack.dev/apis/events-api/" rel="noopener">Events API</a> retry reasons.</p>
+  </div>
+</section>
+
+<!-- ============ CHECK FROM OUTSIDE ============ -->
+<section class="section section-rule" id="outside" aria-labelledby="out-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 04</span> Reproduce it</p>
+      <h2 id="out-h">Check the endpoint the way the provider does</h2>
+      <p>Run these from a machine outside your network (a phone hotspot will do), so you see what the internet sees. Replace <code>hooks.example.com/webhook</code> with your endpoint.</p>
+    </div>
+    <div class="code reveal"><div class="code-head"><span>Terminal</span></div><pre><code><span class="c"># Step 1: does the name resolve, and to the server you expect?</span>
+nslookup hooks.example.com
+
+<span class="c"># Steps 2–3: connect and show the certificate chain. Look for "verify error".</span>
+openssl s_client -connect hooks.example.com:443 -servername hooks.example.com &lt;/dev/null
+
+<span class="c"># Steps 4–7: send an unsigned POST, as a provider would, and time it.</span>
+curl -i -X POST https://hooks.example.com/webhook \
+  -H 'Content-Type: application/json' -d '{"id":"evt_test"}' \
+  -w '\n%{http_code} in %{time_total}s\n'</code></pre></div>
+    <p>The last command should get a fast <code>400</code> or <code>401</code>: your handler is reachable and rejects a request without a valid signature. A <code>301</code>, <code>403</code>, <code>404</code> or <code>405</code> means the request never reached the handler. A <code>200</code> means your handler accepts unsigned requests, which you should fix too (<a href="/verify-webhook-signatures.html">Chapter 04</a>).</p>
+    <div class="note warn reveal"><span class="note-label">Make it fail on purpose</span>The <a href="/webhook-tester.html">webhook tester</a> can answer with the status you pick (<code>400</code>, <code>401</code>, <code>404</code>, <code>429</code>, <code>500</code>, <code>503</code> and others) after a delay of up to 10 seconds. Register its URL in a Stripe sandbox or a test GitHub repository, set it to <code>500</code>, and trigger an event: you'll see the failure in the provider's log and, for Stripe, the next retry scheduled. Set a 5-second delay for a Slack app, and the retries arrive with <code>x-slack-retry-reason: http_timeout</code> in the Headers tab. Switch back to <code>200</code> and redeliver to see it recover.</div>
+  </div>
+</section>
+
+<!-- ============ FIXES ============ -->
+<section class="section section-rule" id="fixes" aria-labelledby="fx-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 05</span> The fixes</p>
+      <h2 id="fx-h">Every common cause, and what to do</h2>
+    </div>
+
+    <article class="fix" id="never-arrives">
+      <div class="fix-head"><span class="n">01</span><h3>It never arrives at all</h3></div>
+      <p class="symptom">No entry in the delivery log · nothing in your server logs</p>
+      <p>The provider didn't try, or tried an address that isn't yours. Go down this list:</p>
+      <ol>
+        <li><strong>The event happened somewhere else.</strong> In another repository, organization or Stripe account than the one the webhook belongs to. Stripe sandboxes are isolated from live mode and from each other: register the endpoint in the environment where the event happens. Test and live endpoints also have different signing secrets.</li>
+        <li><strong>You didn't subscribe to that event type.</strong> Stripe and GitHub send only the types you selected; Slack sends only the events listed under Event Subscriptions, and only for workspaces where the app is installed with the needed scopes.</li>
+        <li><strong>The endpoint is switched off.</strong> GitHub's <strong>Active</strong> box is unchecked, a Stripe destination is disabled, or a Shopify subscription was deleted after repeated failures (see <a href="#disabled">fix 10</a>).</li>
+        <li><strong>The URL is wrong.</strong> A typo, an old tunnel URL, <code>http</code> where you need <code>https</code>, or <code>localhost</code>. GitHub refuses <code>localhost</code> and <code>127.0.0.1</code> outright; for others it points at their own servers. To receive webhooks on your laptop, see <a href="/test-webhook-locally.html">Chapter 02</a>.</li>
+        <li><strong>The provider is having a bad day.</strong> Check its status page (<a href="https://www.githubstatus.com/" rel="noopener">githubstatus.com</a>, <a href="https://status.stripe.com/" rel="noopener">status.stripe.com</a>).</li>
+      </ol>
+    </article>
+
+    <article class="fix" id="timeouts">
+      <div class="fix-head"><span class="n">02</span><h3>Timeouts: you answered too late</h3></div>
+      <p class="symptom">Timed out · http_timeout · the work finished, but the provider says it failed</p>
+      <p>Each provider waits a fixed time for your answer. Slack allows 3 seconds, Shopify 5 seconds for the whole request (and 1 second to connect), GitHub 10 seconds. Stripe doesn't publish a number; it says to return a 2xx before any complex logic. Your work may have succeeded, but the provider marks the delivery failed and, except for GitHub, sends it again.</p>
+      <p>Answer first, then work. Verify the signature, store the event or put it on a queue, return <code>200</code>, and process it afterwards. Sending email, calling another API or waiting on a slow database query inside the request is what usually blows the deadline. A host that sleeps when idle can also miss it on the first request after a quiet period.</p>
+    </article>
+
+    <article class="fix" id="duplicates">
+      <div class="fix-head"><span class="n">03</span><h3>The same event arrives twice</h3></div>
+      <p class="symptom">Two orders, two emails, two rows for one payment</p>
+      <p>Retries after a timeout are the usual reason, but providers also say a webhook can occasionally be delivered more than once even when everything worked. Make the handler idempotent: record each event's ID when you process it, and if you see the ID again, skip the work and still answer <code>200</code>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">Provider</th><th scope="col">Deduplicate on</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Stripe</th><td>The event's <code>id</code> (<code>evt_…</code>). Rarely, Stripe creates two separate events for one change; to catch those, use <code>data.object.id</code> with the event <code>type</code>.</td></tr>
+            <tr><th scope="row">GitHub</th><td>The <code>X-GitHub-Delivery</code> header. A redelivery keeps the original value.</td></tr>
+            <tr><th scope="row">Shopify</th><td>The <code>X-Shopify-Webhook-Id</code> header. <code>X-Shopify-Event-Id</code> is shared by deliveries from the same merchant action.</td></tr>
+            <tr><th scope="row">Slack</th><td>The <code>event_id</code> in the payload; retries also carry <code>x-slack-retry-num</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="fix" id="order">
+      <div class="fix-head"><span class="n">04</span><h3>Events arrive out of order</h3></div>
+      <p class="symptom">invoice.paid before invoice.created · an update for a record you don't have yet</p>
+      <p>Neither Stripe nor GitHub guarantees order, and a retried event can land after newer ones. Don't make one event depend on another having arrived first. When one shows up early, fetch the current state of the object from the provider's API instead of trusting the sequence. Stripe also warns that its <code>created</code> timestamp is in whole seconds, so it can't order events reliably either.</p>
+    </article>
+
+    <article class="fix" id="redirects">
+      <div class="fix-head"><span class="n">05</span><h3>Your server redirects the webhook</h3></div>
+      <p class="symptom">(302) ERR · 301 · 308 · too_many_redirects</p>
+      <p>To a browser, a redirect is routine. To Stripe and Shopify, any 3xx is a failed delivery; Slack follows up to two redirects before it gives up. The usual culprits are an <code>http</code> → <code>https</code> redirect, <code>example.com</code> → <code>www.example.com</code>, and a framework adding or removing a trailing slash. Register the exact final URL. To see where a redirect points:</p>
+      <div class="code"><div class="code-head"><span>Terminal</span></div><pre><code><span class="c"># Prints the status and, for a redirect, where it points</span>
+curl -s -o /dev/null -X POST https://hooks.example.com/webhook \
+  -w '%{http_code} %{redirect_url}\n'</code></pre></div>
+      <p>If it prints a 3xx and a URL, register that URL and run it again until you get a 2xx or 4xx.</p>
+    </article>
+
+    <article class="fix" id="blocked">
+      <div class="fix-head"><span class="n">06</span><h3>Something blocks the POST before your handler</h3></div>
+      <p class="symptom">403 Forbidden · CSRF verification failed · InvalidAuthenticityToken · 401 Unauthorized</p>
+      <p>The provider has no session cookie, CSRF token or password. Anything that expects one turns it away:</p>
+      <ul>
+        <li><strong>CSRF protection</strong> in Rails, Django, Laravel and similar frameworks. Exempt only the webhook route (Stripe's docs show Rails' <code>protect_from_forgery except: :webhook</code>) and rely on the signature instead.</li>
+        <li><strong>A login wall</strong>: basic auth on a staging site, an auth middleware applied to every route, or a hosting platform's preview protection.</li>
+        <li><strong>A WAF or bot protection</strong> that challenges requests without a browser. Add a rule that lets the webhook path through, ideally limited to the provider's IP ranges.</li>
+      </ul>
+    </article>
+
+    <article class="fix" id="firewall">
+      <div class="fix-head"><span class="n">07</span><h3>A firewall or IP allowlist drops the provider</h3></div>
+      <p class="symptom">Unable to connect · failed to connect to network · connection refused</p>
+      <p>If your server only accepts known addresses, the provider's must be on the list, and kept current. Two providers publish them:</p>
+      <ul>
+        <li><strong>Stripe</strong> lists webhook source addresses on its <a href="https://docs.stripe.com/ips#webhook-notifications" rel="noopener">IP addresses page</a>, also as <a href="https://stripe.com/files/ips/ips_webhooks.txt" rel="noopener">text</a> and <a href="https://stripe.com/files/ips/ips_webhooks.json" rel="noopener">JSON</a> for importing into a firewall. It announces changes seven days ahead on its API announce mailing list.</li>
+        <li><strong>GitHub</strong> returns the current ranges in the <code>hooks</code> key of <a href="https://api.github.com/meta" rel="noopener"><code>GET https://api.github.com/meta</code></a>, and says they change from time to time, so refresh your list periodically rather than copying it once.</li>
+      </ul>
+      <p>An allowlist is a second layer, not the check that matters. Verify signatures either way, and for providers that don't publish ranges, the signature is your only check.</p>
+    </article>
+
+    <article class="fix" id="tls">
+      <div class="fix-head"><span class="n">08</span><h3>The certificate doesn't check out</h3></div>
+      <p class="symptom">(TLS error) ERR · Peer certificate cannot be authenticated with given CA certificates · ssl_error</p>
+      <p>Providers verify your certificate before they send anything, and a delivery fails if the check does. The usual causes:</p>
+      <ul>
+        <li><strong>A self-signed certificate.</strong> Fine on your laptop, rejected by Stripe, GitHub, Shopify and Slack. Use a certificate from a public CA, for example a free one from Let's Encrypt.</li>
+        <li><strong>An incomplete chain.</strong> The server sends its own certificate but not the intermediate. Configure the full-chain file.</li>
+        <li><strong>An expired certificate</strong>, often because automatic renewal stopped working.</li>
+        <li><strong>Old TLS.</strong> Stripe supports only TLS 1.2 and 1.3.</li>
+      </ul>
+      <p>Test with <code>openssl s_client</code> from <a href="#outside">§ 04</a> and look for <code>verify error</code>, or run the <a href="https://www.ssllabs.com/ssltest/" rel="noopener">SSL Labs server test</a>, which both Stripe and GitHub suggest. Don't switch off GitHub's SSL verification to make the error go away; GitHub recommends leaving it on.</p>
+    </article>
+
+    <article class="fix" id="too-large">
+      <div class="fix-head"><span class="n">09</span><h3>The body is too large</h3></div>
+      <p class="symptom">413 Request Entity Too Large · 413 Payload Too Large</p>
+      <p>Some webhooks are big: a GitHub push with many commits, an order with hundreds of line items. Limits sit at every layer, and the smallest one wins. Express's <code>express.json()</code> and <code>express.raw()</code> default to <code>100kb</code>; nginx's <code>client_max_body_size</code> defaults to <code>1m</code>. Raise the limit on the webhook route only:</p>
+      <div class="code"><div class="code-head"><span>server.js</span></div><pre><code>app.post("/webhook", express.raw({ type: "application/json", limit: "5mb" }), handler);</code></pre></div>
+      <p>On the sending side, GitHub caps payloads at 25 MB and doesn't deliver larger ones at all, so a giant push may never produce a delivery.</p>
+    </article>
+
+    <article class="fix" id="disabled">
+      <div class="fix-head"><span class="n">10</span><h3>The provider switched your endpoint off</h3></div>
+      <p class="symptom">It was failing for a while, and now nothing arrives</p>
+      <p>Providers stop sending to endpoints that fail too often. What each one does:</p>
+      <ul>
+        <li><strong>Shopify</strong> deletes a subscription after 8 consecutive failures if it was created through the Admin API, and sends warnings to the app's emergency developer email first. A deleted subscription gets nothing until you create it again.</li>
+        <li><strong>Slack</strong> temporarily disables an app's event subscriptions when more than 95% of deliveries fail within 60 minutes, and emails the app's owner. Apps receiving fewer than 1,000 events an hour are exempt. Re-enable delivery in the app's settings.</li>
+        <li><strong>Stripe</strong>: once a destination is disabled, pending retries stop, and Stripe won't resend events generated while it was off. After you re-enable it, find what you missed with the <a href="https://docs.stripe.com/events/manage-webhook-endpoints#process-undelivered-events" rel="noopener">List Events API</a> and <code>delivery_success=false</code> (it covers the last 30 days).</li>
+        <li><strong>GitHub</strong> doesn't retry at all, so a long outage means redelivering from Recent Deliveries within 3 days, or reconciling through the API after that.</li>
+      </ul>
+      <p>Make sure the warning emails reach someone who reads them.</p>
+    </article>
+
+    <article class="fix" id="server-errors">
+      <div class="fix-head"><span class="n">11</span><h3>Your server answers 500, 502 or 503</h3></div>
+      <p class="symptom">500 Internal Server Error · 502 Bad Gateway · 503 Service Unavailable</p>
+      <p>A <code>500</code> is an exception in your code, and your app's logs have the stack trace. Watch for the event that always crashes the handler, an unexpected type or a missing field: every retry fails the same way. Log the event ID, catch errors per event, and fix the bug before redelivering.</p>
+      <p>A <code>502</code> or <code>503</code> usually comes from the proxy or host in front of your app: the app crashed, is restarting during a deploy, or listens on a different port than the proxy expects. If it happens during deploys, the retries will cover it, except on GitHub.</p>
+    </article>
+
+    <article class="fix" id="signature">
+      <div class="fix-head"><span class="n">12</span><h3>The signature check fails</h3></div>
+      <p class="symptom">No signatures found matching the expected signature for payload · 400 · 401</p>
+      <p>The request reached your handler, and your own code rejected it. Almost always it's one of these: the framework parsed the body before you verified it, so the bytes changed; the signing secret is from another endpoint, a sandbox, or the Stripe CLI; or a proxy changed the body or headers on the way. On GitHub, if no secret is configured, there's no signature header to check. Also check that a GitHub webhook's content type is what your parser expects: <code>application/x-www-form-urlencoded</code> wraps the JSON in a <code>payload</code> form field.</p>
+      <p>The full walkthrough, provider by provider, is in <a href="/verify-webhook-signatures.html">Chapter 04: Verify webhook signatures</a>. To check a captured request against your secret, use the <a href="/webhook-tester.html">tester</a>'s Signature tab.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ============ GO LIVE ============ -->
+<section class="section section-rule" id="go-live" aria-labelledby="lp-h">
+  <div class="wrap">
+    <div class="launchpad reveal" data-launchpad data-tpl="Build me a webhook receiver for {idea}. It should verify the provider's signature over the raw request body, reject requests older than five minutes, answer 200 quickly and do the work after, and ignore duplicate event IDs. Add a Dockerfile, deploy it to cloudish.ai using the instructions at https://cloudish.ai/skill.md, and send me the live URL to paste into the provider. If you can't run commands yourself, give me the exact steps to run in my terminal.">
+      <div class="lp-head">
+        <div>
+          <p class="eyebrow"><span class="idx">§ 06</span> Fix it at the root</p>
+          <h2 id="lp-h">DNS, certificates, sleeping servers: hosting problems.<br>Give your webhook a home that answers.</h2>
+        </div>
+        <span class="badge">One sentence · no dashboard</span>
+      </div>
+      <div class="lp-grid">
+        <div class="lp-card">
+          <span class="lp-step"><i>A</i> Your handler works locally?</span>
+          <h3>Ask your coding agent</h3>
+          <p>Open a terminal in your project folder and paste one of these. The agent packages your code, deploys it, and hands you back a permanent HTTPS URL to register once.</p>
+          <div class="cmd"><span class="p">$</span><code>claude "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <div class="cmd"><span class="p">$</span><code>codex "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <p class="fineprint">Keep the signing secret out of your code: the agent can store it as an encrypted secret on the server.</p>
+        </div>
+        <div class="lp-card">
+          <span class="lp-step"><i>B</i> Starting over?</span>
+          <h3>Have one built and deployed</h3>
+          <label class="visually-hidden" for="idea-troubleshoot">Which webhooks should it receive?</label>
+          <input class="field" id="idea-troubleshoot" data-idea type="text" placeholder="Stripe payment events that email me each new sale" autocomplete="off">
+          <div class="chips" style="margin:10px 0 4px">
+            <button type="button" class="chip" data-idea-chip="GitHub push events that post a summary to a Discord channel" aria-pressed="false">GitHub → Discord</button>
+            <button type="button" class="chip" data-idea-chip="Shopify orders that append a row to a Google Sheet" aria-pressed="false">Shopify → Sheet</button>
+            <button type="button" class="chip" data-idea-chip="Stripe subscription events that update a small Postgres table" aria-pressed="false">Stripe → database</button>
+          </div>
+          <div class="ai-buttons">
+            <a class="ai-btn" data-ai="chatgpt" href="https://chatgpt.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true">G</span><span>ChatGPT<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="claude" href="https://claude.ai/new" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#c2410c">C</span><span>Claude<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="grok" href="https://grok.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#334155">X</span><span>Grok<small>Open with prompt</small></span></a>
+          </div>
+          <p class="fineprint">Chat assistants deploy for you when they can run code with internet access; otherwise they'll give you the exact commands.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="section section-rule" id="faq" aria-labelledby="faq-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 07</span> FAQ</p>
+      <h2 id="faq-h">Frequently asked questions</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>Why is my webhook not being received?</summary>
+        <div class="faq-a"><p>Open the provider's delivery log. If there is no delivery attempt at all, the event happened somewhere the endpoint doesn't listen: another account, repository or sandbox, an event type you didn't subscribe to, or an endpoint that is disabled. If there is an attempt with an error, the error names the step that failed: DNS, connection, TLS, an HTTP status from your server, or a timeout.</p></div>
+      </details>
+      <details>
+        <summary>Why does Stripe say my webhook failed?</summary>
+        <div class="faq-a"><p>Stripe counts anything other than a 2xx as a failure, including redirects. Open Workbench, select the endpoint under Webhooks, and open the Event deliveries tab to see the status of each attempt. Unable to connect means Stripe couldn't reach your server, TLS error means a certificate problem, Timed out means you answered too slowly, and a 4xx or 5xx came from your own server.</p></div>
+      </details>
+      <details>
+        <summary>How do I redeliver a failed GitHub webhook?</summary>
+        <div class="faq-a"><p>GitHub doesn't retry failed deliveries on its own. In the repository, go to Settings, Webhooks, click the webhook's URL, open Recent Deliveries, click the delivery and press Redeliver. You can also use the REST API: <code>POST /repos/{owner}/{repo}/hooks/{hook_id}/deliveries/{delivery_id}/attempts</code>. Deliveries from the past 3 days can be redelivered.</p></div>
+      </details>
+      <details>
+        <summary>What is the webhook timeout for Stripe, GitHub, Shopify and Slack?</summary>
+        <div class="faq-a"><p>Slack expects a 2xx within 3 seconds, Shopify within 5 seconds (and 1 second to connect), and GitHub within 10 seconds. Stripe doesn't publish a number; it says to return a 2xx before any complex logic. Answer first, then do the work in the background.</p></div>
+      </details>
+      <details>
+        <summary>Why do I receive the same webhook more than once?</summary>
+        <div class="faq-a"><p>Providers retry when they don't see a 2xx in time, and even successful deliveries can occasionally repeat. Record the event ID you've processed (Stripe's event <code>id</code>, <code>X-GitHub-Delivery</code>, <code>X-Shopify-Webhook-Id</code>) and skip it the next time, while still answering 200.</p></div>
+      </details>
+      <details>
+        <summary>Why does my webhook endpoint return 401 or 403?</summary>
+        <div class="faq-a"><p>Something rejected the request before or inside your handler: CSRF protection on the POST route, login or basic auth in front of the app, a firewall or bot protection, or your own signature check failing. Exempt the webhook route from CSRF and login, allow the provider through the firewall, and check the signing secret.</p></div>
+      </details>
+      <details>
+        <summary>What happens if my webhook endpoint keeps failing?</summary>
+        <div class="faq-a"><p>It can be switched off. Shopify deletes subscriptions created through the Admin API after 8 consecutive failures. Slack temporarily disables event subscriptions when more than 95% of deliveries fail within 60 minutes, for apps receiving at least 1,000 events an hour, and emails the app owner. Stripe doesn't resend events generated while an endpoint is disabled, so recover them from the Events API.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="section-tight" aria-label="Next chapter">
+  <div class="wrap">
+    <a class="next-chapter reveal" href="/verify-webhook-signatures.html">
+      <span><small>Next · Chapter 04</small><strong>Verify webhook signatures</strong><span class="sub">HMAC over the raw body, timestamps and secret rotation: how Stripe, GitHub, Shopify and Slack sign, and how to check it.</span></span>
+      <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg><span class="logo-text">whatis<b>webhook</b></span></a>
+        <p>A visual field guide to webhooks: what they are, how to test them, why they fail, and where they should live.</p>
+      </div>
+      <div class="footer-col"><h2>Chapters</h2><ul>
+        <li><a href="/">01 · What is a webhook?</a></li>
+        <li><a href="/test-webhook-locally.html">02 · Test a webhook locally</a></li>
+        <li><a href="/webhook-not-working.html">03 · Webhook not working</a></li>
+        <li><a href="/verify-webhook-signatures.html">04 · Verify signatures</a></li>
+        <li><a href="/deploy-webhook-receiver.html">05 · Deploy a receiver</a></li>
+        <li><a href="/webhook-tester.html">Tool · Webhook tester</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>Primary sources</h2><ul>
+        <li><a href="https://docs.stripe.com/events/manage-webhook-endpoints" rel="noopener">Stripe · manage webhook endpoints</a></li>
+        <li><a href="https://docs.stripe.com/ips" rel="noopener">Stripe · IP addresses</a></li>
+        <li><a href="https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/troubleshooting-webhooks" rel="noopener">GitHub · troubleshooting webhooks</a></li>
+        <li><a href="https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/redelivering-webhooks" rel="noopener">GitHub · redelivering webhooks</a></li>
+        <li><a href="https://shopify.dev/docs/apps/build/webhooks/troubleshooting-webhooks" rel="noopener">Shopify · troubleshoot webhooks</a></li>
+        <li><a href="https://docs.slack.dev/apis/events-api/" rel="noopener">Slack · Events API</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>For machines</h2><ul>
+        <li><a href="/llms.txt">llms.txt</a></li>
+        <li><a href="/sitemap.xml">sitemap.xml</a></li>
+        <li><a href="https://cloudish.ai/skill.md" rel="noopener">Cloudish deploy skill</a></li>
+      </ul></div>
+    </div>
+    <div class="titleblock">
+      <div><span>Project</span><strong>What is a webhook? A field guide</strong></div>
+      <div><span>Sheet</span><strong>03 of 05</strong></div>
+      <div><span>Drawing</span><strong>Troubleshoot</strong></div>
+      <div><span>Rev</span><strong>1.0.0</strong></div>
+      <div><span>Scale</span><strong>Provider : handler</strong></div>
+      <div><span>Deployed on</span><strong><a href="https://cloudish.ai/" rel="noopener">Cloudish.ai</a> — not a laptop</strong></div>
+    </div>
+    <div class="footer-legal"><span>© 2026 whatiswebhook.com</span><span>Drawn in blueprint blue. Every request answered from a data center.</span></div>
+  </div>
+</footer>
+<script src="/script.js?v=1.0.0" defer></script>
+</body>
+</html>

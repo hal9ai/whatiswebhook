@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What Is a Webhook? Explained Visually (Webhook vs API, With Examples)</title>
+<meta name="description" content="A webhook is an app calling you back: when something happens, it sends an HTTP request to your URL. A visual guide to how webhooks work, what one looks like, webhooks vs APIs, and real examples.">
+<link rel="canonical" href="https://whatiswebhook.com/">
+<meta name="theme-color" content="#f5f8fd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#061633" media="(prefers-color-scheme: dark)">
+<script src="/theme.js"></script>
+<link rel="preload" href="/fonts/space-grotesk-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-sans-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=1.0.0">
+<link rel="stylesheet" href="/webhook.css?v=1.0.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="whatiswebhook.com">
+<meta property="og:title" content="What is a webhook? An app, calling you back.">
+<meta property="og:description" content="A visual field guide: how webhooks work, what one looks like on the wire, webhooks vs polling an API, and where the URL has to live.">
+<meta property="og:url" content="https://whatiswebhook.com/">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://whatiswebhook.com/#website",
+      "name": "whatiswebhook.com",
+      "url": "https://whatiswebhook.com/",
+      "description": "A visual field guide to webhooks: what they are, how to test them locally, why they fail, how to verify signatures, and how to deploy a receiver.",
+      "inLanguage": "en"
+    },
+    {
+      "@type": "TechArticle",
+      "@id": "https://whatiswebhook.com/#article",
+      "headline": "What is a webhook?",
+      "description": "A webhook is an HTTP request that a service sends to a URL you choose when an event happens, so your app learns about it right away instead of asking repeatedly.",
+      "url": "https://whatiswebhook.com/",
+      "datePublished": "2026-10-14",
+      "dateModified": "2026-10-14",
+      "inLanguage": "en",
+      "isPartOf": { "@id": "https://whatiswebhook.com/#website" },
+      "about": [
+        { "@type": "Thing", "name": "Webhook" },
+        { "@type": "Thing", "name": "HTTP" },
+        { "@type": "Thing", "name": "Application programming interface" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://whatiswebhook.com/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is a webhook in simple terms?",
+          "acceptedAnswer": { "@type": "Answer", "text": "A webhook is a service calling you back. You give it a URL; when something happens, such as a payment or a new order, it sends an HTTP request to that URL describing the event. Your app reacts right away, without asking over and over." }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the difference between a webhook and an API?",
+          "acceptedAnswer": { "@type": "Answer", "text": "With an API call, your app asks and the service answers. With a webhook, the service starts the request and your app answers. Most services offer both: webhooks tell you that something happened, and the API lets you fetch details or act on it." }
+        },
+        {
+          "@type": "Question",
+          "name": "Is a webhook a GET or a POST request?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Almost always POST, with a JSON body describing the event. Some services send form-encoded bodies instead, such as Twilio for incoming messages and Slack for slash commands." }
+        },
+        {
+          "@type": "Question",
+          "name": "Do webhooks need a public URL?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. The provider sends the request from the internet, so the URL has to be reachable from the internet, usually over HTTPS. A localhost URL only works on your own computer; while developing, use a tunnel or the provider's CLI." }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I know a webhook really came from the provider?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Check its signature. Providers sign each request with a secret only you and they know, usually an HMAC-SHA256 of the raw body sent in a header. Recompute it on your side and reject requests that don't match." }
+        },
+        {
+          "@type": "Question",
+          "name": "What happens if my server is down when a webhook is sent?",
+          "acceptedAnswer": { "@type": "Answer", "text": "It depends on the provider. Stripe retries for up to three days in live mode, Shopify 8 times over 4 hours, and Slack up to 3 times. GitHub doesn't retry automatically; you redeliver from its delivery log." }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--stroke-2);stroke-width:1"/></pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--stroke)"/></marker>
+    <marker id="arr-sig" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--signal)"/></marker>
+    <marker id="arr-ok" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--ok)"/></marker>
+  </defs>
+</svg>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <a class="logo" href="/" aria-label="whatiswebhook.com home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><g class="logo-loop"><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg>
+      <span class="logo-text">whatis<b>webhook</b></span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Chapters">
+      <a href="/" aria-current="page"><span class="n">01</span>Webhooks</a>
+      <a href="/test-webhook-locally.html"><span class="n">02</span>Test locally</a>
+      <a href="/webhook-not-working.html"><span class="n">03</span>Troubleshoot</a>
+      <a href="/verify-webhook-signatures.html"><span class="n">04</span>Signatures</a>
+      <a href="/deploy-webhook-receiver.html"><span class="n">05</span>Deploy</a>
+    </nav>
+    <div class="masthead-actions">
+      <button class="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to dark blueprint theme"><span class="knob" aria-hidden="true"></span><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7L7 17M17 7l1.7-1.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/webhook-tester.html">Webhook tester</a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="bars" aria-hidden="true"></span>Menu</button>
+    </div>
+  </div>
+  <div class="progress" aria-hidden="true"><span></span></div>
+</header>
+
+<main id="main">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="kicker"><span class="tag">CH. 01</span> A field guide · from an event to your server</p>
+      <h1>What is a <span class="hl">webhook</span>?</h1>
+      <p class="lede">It's an app calling you back. Instead of asking a service “anything new?” every few seconds, you give it a URL, and it sends you an HTTP request the moment something happens: a payment, a push, an order. Here's how that works, what one looks like on the wire, and where the URL has to live.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#step-by-step">Follow one webhook <span class="arr" aria-hidden="true">↓</span></a>
+        <a class="btn" href="/webhook-tester.html">Watch a real one arrive</a>
+      </div>
+      <dl class="readouts">
+        <div><dt>Who starts the request</dt><dd>The provider</dd></div>
+        <div><dt>Usually</dt><dd>POST · JSON</dd></div>
+        <div><dt>Your URL must be</dt><dd>Public</dd></div>
+      </dl>
+    </div>
+
+    <figure class="fig hero-fig corners" data-crosshair>
+      <div class="fig-bar"><span><b>Fig. 01</b> — asking vs being told</span><span class="live">Live</span></div>
+      <svg class="dg anim" viewBox="0 0 600 450" role="img" aria-labelledby="f1t f1d">
+        <title id="f1t">Polling an API compared with receiving a webhook</title>
+        <desc id="f1d">Top half, polling: your app asks a service "anything new?" again and again, and the service answers "no" each time until, eventually, "yes". Bottom half, a webhook: your app waits; when the event happens, the service sends one request to your app's URL, and your app answers 200 OK.</desc>
+        <!-- POLLING -->
+        <text class="lbl" x="24" y="30">A · POLLING: YOUR APP ASKS</text>
+        <rect class="bg" x="24" y="46" width="150" height="150" rx="8"/><rect class="ln" x="24" y="46" width="150" height="150" rx="8"/>
+        <text class="tx-3" x="38" y="66">YOUR APP</text>
+        <text class="tx" x="38" y="92">every 10 s:</text>
+        <text class="tx-2" x="38" y="110">GET /orders?</text>
+        <text class="tx-2" x="38" y="126">since=…</text>
+        <rect class="bg" x="426" y="46" width="150" height="150" rx="8"/><rect class="ln" x="426" y="46" width="150" height="150" rx="8"/>
+        <text class="tx-3" x="440" y="66">THE SERVICE</text>
+        <text class="tx" x="440" y="92">Shop API</text>
+        <g class="tx-2">
+          <path class="ln-2" d="M174 74 H420" marker-end="url(#arr)"/><text class="tx-3 mid" x="297" y="68">ANYTHING NEW?</text>
+          <path class="ln-3" d="M426 92 H180" marker-end="url(#arr)"/><text class="tx-3 mid" x="297" y="88">NO</text>
+          <path class="ln-2" d="M174 112 H420" marker-end="url(#arr)"/><text class="tx-3 mid" x="297" y="106">ANYTHING NEW?</text>
+          <path class="ln-3" d="M426 130 H180" marker-end="url(#arr)"/><text class="tx-3 mid" x="297" y="126">NO</text>
+          <path class="ln-2" d="M174 150 H420" marker-end="url(#arr)"/><text class="tx-3 mid" x="297" y="144">ANYTHING NEW?</text>
+          <path class="ln-ok" d="M426 172 H180" marker-end="url(#arr-ok)"/><text class="lbl-ok mid" x="297" y="166">YES · ORDER #42</text>
+        </g>
+        <text class="tx-3" x="24" y="216">MOST REQUESTS ARE WASTED · NEWS ARRIVES UP TO 10 S LATE</text>
+
+        <path class="ln-3" d="M20 236 H580"/>
+
+        <!-- WEBHOOK -->
+        <text class="lbl-sig" x="24" y="266">B · WEBHOOK: THE SERVICE TELLS YOU</text>
+        <rect class="bg" x="24" y="282" width="150" height="130" rx="8"/><rect class="ln" x="24" y="282" width="150" height="130" rx="8"/>
+        <text class="tx-3" x="38" y="302">THE SERVICE</text>
+        <text class="tx" x="38" y="328">Shop</text>
+        <text class="tx-2" x="38" y="346">order #42 placed</text>
+        <circle class="f-sig" cx="44" cy="384" r="5"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;.15;.2;.9;1" dur="5s" repeatCount="indefinite"/></circle>
+        <text class="lbl-sig" x="56" y="388">EVENT</text>
+        <rect class="bg-blue" x="426" y="282" width="150" height="130" rx="8"/><rect class="ln" x="426" y="282" width="150" height="130" rx="8"/>
+        <text class="tx-3" x="440" y="302">YOUR APP</text>
+        <text class="tx" x="440" y="328">https://you.app</text>
+        <text class="tx" x="440" y="346">/webhook</text>
+        <text class="lbl-ok" x="440" y="392">200 OK<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;.55;.6;.9;1" dur="5s" repeatCount="indefinite"/></text>
+        <path class="ln-sig flow" d="M174 330 H420" marker-end="url(#arr-sig)"/>
+        <text class="tx-2 mid" x="297" y="320">POST /webhook · order.created</text>
+        <path class="ln-ok" d="M426 372 H180" marker-end="url(#arr-ok)" opacity=".7"/>
+        <text class="tx-3 mid" x="297" y="364">200 OK, WITHIN SECONDS</text>
+        <path id="wh-req" d="M174 330 H420" fill="none"/>
+        <g class="pkt"><circle class="pkt-halo" r="10"/><circle class="pkt-core" r="4.6"/>
+          <animateMotion dur="5s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;.2;.55;1" calcMode="linear"><mpath href="#wh-req"/></animateMotion>
+          <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.19;.2;.55;.56;1" dur="5s" repeatCount="indefinite"/>
+        </g>
+        <text class="tx-3" x="24" y="436">ONE REQUEST PER EVENT · ARRIVES IN A FRACTION OF A SECOND</text>
+      </svg>
+      <figcaption>Polling (A) means asking on a timer and mostly hearing “no”. A webhook (B) turns the direction around: the service sends one request (<span style="color:var(--signal)">●</span>) to your URL when the event happens, and your app answers <code>200 OK</code>.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ QUICK ANSWER ============ -->
+<section class="section section-tight" id="quick-answer" aria-labelledby="qa-h">
+  <div class="wrap split split-wide">
+    <div class="reveal">
+      <p class="eyebrow"><span class="idx">§ 01</span> The short answer</p>
+      <h2 id="qa-h">Webhooks, in one paragraph</h2>
+      <div class="answer">
+        <span class="answer-label">Quick answer</span>
+        <p>A <strong>webhook</strong> is an HTTP request that a service sends to a URL you choose when an event happens. You register the URL once, for instance <code>https://your.app/webhook</code> in Stripe's dashboard. From then on, every payment, refund or failed charge arrives there as a <code>POST</code> with a JSON body describing it, and your server answers <code>200 OK</code>.</p>
+        <p>It's the opposite direction of a normal API call: the service starts the conversation, so your app learns about events right away without asking over and over. That's also why the URL has to be <strong>public and always on</strong>: the internet has to be able to reach it.</p>
+      </div>
+    </div>
+    <div class="reveal reveal-d1">
+      <p class="eyebrow"><span class="idx">Spec sheet</span> Key facts</p>
+      <dl class="facts">
+        <dt>Also called</dt><dd>HTTP callback · event notification · “reverse API”</dd>
+        <dt>Direction</dt><dd>Service → your server</dd>
+        <dt>Transport</dt><dd>HTTPS, almost always POST</dd>
+        <dt>Body</dt><dd>JSON, sometimes form-encoded</dd>
+        <dt>Proof of origin</dt><dd>A signature header, usually HMAC-SHA256</dd>
+        <dt>Expected answer</dt><dd>A 2xx within seconds (Slack 3 s, Shopify 5 s, GitHub 10 s)</dd>
+        <dt>If you miss it</dt><dd>Most providers retry; GitHub doesn't</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SEQUENCE ============ -->
+<section class="section section-rule" id="step-by-step" aria-labelledby="seq-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 02</span> The life of a webhook</p>
+      <h2 id="seq-h">One payment, step by step</h2>
+      <p>A customer pays in your shop. Here's every message that follows, from the card being charged to the confirmation email.</p>
+    </div>
+    <figure class="fig reveal" data-seq>
+      <div class="fig-bar"><span><b>Fig. 02</b> — A Stripe payment webhook</span><span>t = <b class="seq-clock" data-clock>0 ms</b> · <button class="chip" type="button" data-replay style="min-height:28px;padding:3px 10px;font-size:.72rem">Replay</button></span></div>
+      <svg class="dg seq" viewBox="0 0 800 520" role="img" aria-labelledby="sq-t sq-d">
+        <title id="sq-t">Sequence of a payment webhook</title>
+        <desc id="sq-d">The customer's browser confirms a payment with Stripe. Stripe charges the card, then sends POST /webhook with a payment_intent.succeeded event to your server. Your server checks the signature, answers 200 OK straight away, and afterwards marks the order paid in the database and sends a confirmation email. Timings are illustrative.</desc>
+        <g>
+          <rect class="bg ln" x="40" y="14" width="130" height="38" rx="8"/><text class="lbl mid" x="105" y="38">CUSTOMER</text>
+          <rect class="bg ln" x="230" y="14" width="130" height="38" rx="8"/><text class="lbl mid" x="295" y="38">STRIPE</text>
+          <rect class="bg ln" x="430" y="14" width="150" height="38" rx="8"/><text class="lbl mid" x="505" y="38">YOUR SERVER</text>
+          <rect class="bg ln" x="640" y="14" width="130" height="38" rx="8"/><text class="lbl mid" x="705" y="38">DB · EMAIL</text>
+          <path class="ln-3 dash" d="M105 52 V508 M295 52 V508 M505 52 V508 M705 52 V508"/>
+        </g>
+        <g class="msg" data-t="0"><path class="ln" d="M105 92 H289" marker-end="url(#arr)"/><text class="tx-2 mid" x="200" y="84">confirm payment</text></g>
+        <g class="msg" data-t="900"><path class="ln-sig" d="M295 130 h26 v18 h-20" marker-end="url(#arr-sig)"/><text class="lbl-sig" x="330" y="146">CARD CHARGED · EVENT CREATED</text></g>
+        <g class="msg" data-t="950"><path class="ln" d="M295 178 H111" marker-end="url(#arr)"/><text class="tx-2 mid" x="200" y="170">“payment succeeded”</text></g>
+        <g class="msg" data-t="1000"><path class="ln-sig" d="M295 226 H499" marker-end="url(#arr-sig)"/><text class="tx-2 mid" x="400" y="210">POST /webhook</text><text class="tx-3 mid" x="400" y="222">payment_intent.succeeded</text></g>
+        <g class="msg" data-t="1003"><path class="ln-sig" d="M505 260 h26 v18 h-20" marker-end="url(#arr-sig)"/><text class="lbl-sig" x="540" y="276">SIGNATURE OK</text></g>
+        <g class="msg" data-t="1005"><path class="ln-ok" d="M505 312 H301" marker-end="url(#arr-ok)"/><text class="lbl-ok mid" x="400" y="304">200 OK</text></g>
+        <g class="msg" data-t="1010"><path class="ln" d="M505 360 H699" marker-end="url(#arr)"/><text class="tx-2 mid" x="605" y="352">order #42 → paid</text></g>
+        <g class="msg" data-t="1300"><path class="ln" d="M505 408 H699" marker-end="url(#arr)"/><text class="tx-2 mid" x="605" y="400">send receipt</text></g>
+        <g class="msg" data-t="1300"><text class="tx-3" x="40" y="470">STRIPE IS DONE AT 200 OK. THE SLOW WORK HAPPENS AFTER, SO NO TIMEOUT, NO RETRY.</text></g>
+      </svg>
+      <figcaption>Illustrative timings. Two things to notice: Stripe tells your <em>server</em> about the payment, not just the customer's browser, which might close before it hears back. And your server answers <code>200</code> before doing slow work, because the provider only waits a few seconds.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ ANATOMY ============ -->
+<section class="section section-rule" id="anatomy" aria-labelledby="an-h">
+  <div class="wrap split split-wide">
+    <div class="reveal">
+      <p class="eyebrow"><span class="idx">§ 03</span> On the wire</p>
+      <h2 id="an-h">What a webhook actually looks like</h2>
+      <p>Strip away the vocabulary and a webhook is an ordinary HTTP request. This is the shape of one Stripe event, shortened:</p>
+      <div class="code"><div class="code-head"><span>HTTP request · as your server receives it</span></div><pre><code><span class="k">POST</span> /webhook HTTP/1.1
+<span class="k">Host:</span> your.app
+<span class="k">Content-Type:</span> application/json; charset=utf-8
+<span class="k">Stripe-Signature:</span> t=1791973163,v1=5257a869e7ec…
+
+{
+  <span class="s">"id"</span>: <span class="s">"evt_1Q8…"</span>,
+  <span class="s">"object"</span>: <span class="s">"event"</span>,
+  <span class="s">"type"</span>: <span class="s">"payment_intent.succeeded"</span>,
+  <span class="s">"created"</span>: 1791973162,
+  <span class="s">"data"</span>: {
+    <span class="s">"object"</span>: { <span class="s">"id"</span>: <span class="s">"pi_3Q8…"</span>, <span class="s">"amount"</span>: 2000, <span class="s">"currency"</span>: <span class="s">"eur"</span> }
+  }
+}</code></pre></div>
+      <p><a class="btn" href="/webhook-tester.html">Capture a real one in the tester <span class="arr" aria-hidden="true">→</span></a></p>
+    </div>
+    <div class="reveal reveal-d1">
+      <p class="eyebrow"><span class="idx">Legend</span> Each part</p>
+      <dl class="facts">
+        <dt>POST /webhook</dt><dd>The URL you registered. The path is yours to choose.</dd>
+        <dt>Content-Type</dt><dd>How to read the body. JSON for most providers.</dd>
+        <dt>Signature header</dt><dd>Proof that it came from the provider and wasn't changed. <a href="/verify-webhook-signatures.html">How to check it</a>.</dd>
+        <dt>id</dt><dd>Unique per event. Store it, and ignore an ID you've already handled: retries send the same one again.</dd>
+        <dt>type</dt><dd>What happened. You subscribe to the types you care about.</dd>
+        <dt>data</dt><dd>The thing it happened to, often a snapshot. Fetch it fresh from the API if you need the latest state.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============ POLLING CALCULATOR ============ -->
+<section class="section section-rule" id="polling" aria-labelledby="pc-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 04</span> Interactive</p>
+      <h2 id="pc-h">Why not just poll? Do the math.</h2>
+      <p>Polling means asking the API on a timer. Move the sliders and compare what it costs with what a webhook costs for the same news.</p>
+    </div>
+    <div class="calc reveal" data-polling>
+      <div class="calc-in">
+        <label for="pc-every">Poll every <output data-out="every">10 s</output></label>
+        <input id="pc-every" type="range" min="0" max="8" step="1" value="2" data-in="every">
+        <label for="pc-events">Events per day <output data-out="events">50</output></label>
+        <input id="pc-events" type="range" min="0" max="6" step="1" value="2" data-in="events">
+      </div>
+      <div class="calc-out">
+        <div class="calc-col">
+          <span class="calc-h">Polling</span>
+          <dl>
+            <dt>Requests a day</dt><dd data-r="poll-req">8,640</dd>
+            <dt>…that find nothing</dt><dd data-r="poll-empty">99.4 %</dd>
+            <dt>Average delay</dt><dd data-r="poll-delay">5 s</dd>
+          </dl>
+        </div>
+        <div class="calc-col is-hook">
+          <span class="calc-h">Webhook</span>
+          <dl>
+            <dt>Requests a day</dt><dd data-r="hook-req">50</dd>
+            <dt>…that find nothing</dt><dd>0 %</dd>
+            <dt>Average delay</dt><dd>&lt; 1 s</dd>
+          </dl>
+        </div>
+      </div>
+      <p class="fineprint" data-r="note">Polling every 10 seconds costs 173 requests for each event you learn about, and many APIs rate-limit long before that.</p>
+    </div>
+    <p>Polling still has its place: it needs no public URL, and it's how you catch up after downtime. Many apps do both. Webhooks for speed, and an occasional API sweep so a lost delivery never goes unnoticed.</p>
+  </div>
+</section>
+
+<!-- ============ COMPARE ============ -->
+<section class="section section-rule" id="compare" aria-labelledby="cmp-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 05</span> Reference</p>
+      <h2 id="cmp-h">Webhook vs API vs WebSocket vs server-sent events</h2>
+      <p>Four ways for two programs to stay in sync. They differ in who opens the connection, and for how long.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead><tr><th scope="col"></th><th scope="col">Who starts it</th><th scope="col">Connection</th><th scope="col">Learns of an event</th><th scope="col">Needs a public URL</th><th scope="col">Typical use</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">API call (polling)</th><td>Your app</td><td>One request, again on a timer</td><td>At the next poll</td><td>No</td><td>Fetching data, catching up</td></tr>
+          <tr><th scope="row">Webhook</th><td>The service</td><td>One request per event</td><td>Within a second or so</td><td><strong>Yes</strong>, yours</td><td>Server-to-server events: payments, pushes, orders</td></tr>
+          <tr><th scope="row">WebSocket</th><td>Your app, then both ways</td><td>Kept open</td><td>Immediately</td><td>No</td><td>Chat, live collaboration, games</td></tr>
+          <tr><th scope="row">Server-sent events</th><td>Your app, then the server talks</td><td>Kept open, one way</td><td>Immediately</td><td>No</td><td>Live feeds and progress in a browser</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">The webhook is the only one where <em>your</em> side must be reachable. That's what makes it simple for the sender, and it's the part that trips people up when they develop on a laptop. <a href="/test-webhook-locally.html">How to test one locally →</a></p>
+  </div>
+</section>
+
+<!-- ============ EXAMPLES ============ -->
+<section class="section section-rule" id="examples" aria-labelledby="ex-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 06</span> In the wild</p>
+      <h2 id="ex-h">Webhooks you've probably met</h2>
+    </div>
+    <div class="cards cards-3">
+      <article class="card reveal">
+        <span class="card-idx">Payments</span>
+        <h3>Stripe</h3>
+        <p><code>payment_intent.succeeded</code>, <code>invoice.paid</code>, <code>customer.subscription.deleted</code>: the source of truth for what happened to the money, even if the customer closed the tab.</p>
+      </article>
+      <article class="card reveal reveal-d1">
+        <span class="card-idx">Code</span>
+        <h3>GitHub</h3>
+        <p><code>push</code>, <code>pull_request</code>, <code>issues</code>: how CI servers, chat bots and deploy tools learn that someone pushed code.</p>
+      </article>
+      <article class="card reveal">
+        <span class="card-idx">Commerce</span>
+        <h3>Shopify</h3>
+        <p><code>orders/create</code>, <code>products/update</code>: how apps sync stock, print labels or update a spreadsheet when an order comes in.</p>
+      </article>
+      <article class="card reveal reveal-d1">
+        <span class="card-idx">Chat</span>
+        <h3>Slack</h3>
+        <p>The Events API sends JSON when someone mentions your bot; slash commands arrive as form fields. Slack expects an answer within 3 seconds.</p>
+      </article>
+      <article class="card reveal">
+        <span class="card-idx">Messaging</span>
+        <h3>Twilio</h3>
+        <p>When someone texts your number, Twilio calls your URL with the message as form fields, and your answer can tell it what to reply.</p>
+      </article>
+      <article class="card reveal reveal-d1">
+        <span class="card-idx">The other direction</span>
+        <h3>“Incoming webhooks”</h3>
+        <p>Slack and Discord also use the word for a URL <em>they</em> give <em>you</em>: POST to it and a message appears in a channel. Same idea, opposite side.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHECKLIST ============ -->
+<section class="section section-rule" id="checklist" aria-labelledby="ck-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 07</span> Receiving them</p>
+      <h2 id="ck-h">What a webhook URL needs</h2>
+      <p>Sending a webhook is the provider's job. Receiving one well is yours, and it comes down to five things. Each has its chapter.</p>
+    </div>
+    <ul class="picks reveal">
+      <li><span>Reachable from the internet, over HTTPS. Not <code>localhost</code>.</span><b><a href="/test-webhook-locally.html">02 · Test locally</a></b></li>
+      <li><span>Answers 2xx within a few seconds, then does the work.</span><b><a href="/webhook-not-working.html">03 · Troubleshoot</a></b></li>
+      <li><span>Checks the signature over the raw body.</span><b><a href="/verify-webhook-signatures.html">04 · Signatures</a></b></li>
+      <li><span>Handles the same event twice without doing it twice.</span><b><a href="/webhook-not-working.html">03 · Troubleshoot</a></b></li>
+      <li><span>Always on, at a URL that never changes.</span><b><a href="/deploy-webhook-receiver.html">05 · Deploy</a></b></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ GO LIVE ============ -->
+<section class="section section-rule" id="go-live" aria-labelledby="lp-h">
+  <div class="wrap">
+    <div class="launchpad reveal" data-launchpad data-tpl="Build me a webhook receiver for {idea}. It should verify the provider's signature over the raw request body, reject requests older than five minutes, answer 200 quickly and do the work after, and ignore duplicate event IDs. Add a Dockerfile, deploy it to cloudish.ai using the instructions at https://cloudish.ai/skill.md, and send me the live URL to paste into the provider. If you can't run commands yourself, give me the exact steps to run in my terminal.">
+      <div class="lp-head">
+        <div>
+          <p class="eyebrow"><span class="idx">§ 08</span> Your own webhook URL</p>
+          <h2 id="lp-h">A webhook needs somewhere to land.<br>Give it a URL that's always on.</h2>
+        </div>
+        <span class="badge">One sentence · no dashboard</span>
+      </div>
+      <div class="lp-grid">
+        <div class="lp-card">
+          <span class="lp-step"><i>A</i> Already have a handler?</span>
+          <h3>Ask your coding agent</h3>
+          <p>Open a terminal in your project folder and paste one of these. The agent packages your code, deploys it, and hands you back a permanent HTTPS URL to register with the provider.</p>
+          <div class="cmd"><span class="p">$</span><code>claude "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <div class="cmd"><span class="p">$</span><code>codex "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <p class="fineprint">Works with Claude Code, Codex, and other coding agents that can run commands.</p>
+        </div>
+        <div class="lp-card">
+          <span class="lp-step"><i>B</i> Starting from zero?</span>
+          <h3>Have one built and deployed</h3>
+          <label class="visually-hidden" for="idea-home">Which webhooks should it receive?</label>
+          <input class="field" id="idea-home" data-idea type="text" placeholder="Stripe payment events that email me each new sale" autocomplete="off">
+          <div class="chips" style="margin:10px 0 4px">
+            <button type="button" class="chip" data-idea-chip="GitHub push events that post a summary to a Discord channel" aria-pressed="false">GitHub → Discord</button>
+            <button type="button" class="chip" data-idea-chip="Shopify orders that append a row to a Google Sheet" aria-pressed="false">Shopify → Sheet</button>
+            <button type="button" class="chip" data-idea-chip="Twilio text messages that reply with today's opening hours" aria-pressed="false">SMS auto-reply</button>
+          </div>
+          <div class="ai-buttons">
+            <a class="ai-btn" data-ai="chatgpt" href="https://chatgpt.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true">G</span><span>ChatGPT<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="claude" href="https://claude.ai/new" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#c2410c">C</span><span>Claude<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="grok" href="https://grok.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#334155">X</span><span>Grok<small>Open with prompt</small></span></a>
+          </div>
+          <p class="fineprint">Chat assistants deploy for you when they can run code with internet access; otherwise they'll give you the exact commands.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="section section-rule" id="faq" aria-labelledby="faq-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 09</span> FAQ</p>
+      <h2 id="faq-h">Frequently asked questions</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>What is a webhook in simple terms?</summary>
+        <div class="faq-a"><p>A webhook is a service calling you back. You give it a URL; when something happens, such as a payment or a new order, it sends an HTTP request to that URL describing the event. Your app reacts right away, without asking over and over.</p></div>
+      </details>
+      <details>
+        <summary>What is the difference between a webhook and an API?</summary>
+        <div class="faq-a"><p>With an API call, your app asks and the service answers. With a webhook, the service starts the request and your app answers. Most services offer both: webhooks tell you that something happened, and the API lets you fetch details or act on it.</p></div>
+      </details>
+      <details>
+        <summary>Is a webhook a GET or a POST request?</summary>
+        <div class="faq-a"><p>Almost always POST, with a JSON body describing the event. Some services send form-encoded bodies instead, such as Twilio for incoming messages and Slack for slash commands.</p></div>
+      </details>
+      <details>
+        <summary>Do webhooks need a public URL?</summary>
+        <div class="faq-a"><p>Yes. The provider sends the request from the internet, so the URL has to be reachable from the internet, usually over HTTPS. A localhost URL only works on your own computer; while developing, use <a href="/test-webhook-locally.html">a tunnel or the provider's CLI</a>.</p></div>
+      </details>
+      <details>
+        <summary>How do I know a webhook really came from the provider?</summary>
+        <div class="faq-a"><p>Check its signature. Providers sign each request with a secret only you and they know, usually an HMAC-SHA256 of the raw body sent in a header. Recompute it on your side and reject requests that don't match. <a href="/verify-webhook-signatures.html">How, for each provider</a>.</p></div>
+      </details>
+      <details>
+        <summary>What happens if my server is down when a webhook is sent?</summary>
+        <div class="faq-a"><p>It depends on the provider. Stripe retries for up to three days in live mode, Shopify 8 times over 4 hours, and Slack up to 3 times. GitHub doesn't retry automatically; you redeliver from its delivery log.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="section-tight" aria-label="Next chapter">
+  <div class="wrap">
+    <a class="next-chapter reveal" href="/test-webhook-locally.html">
+      <span><small>Next · Chapter 02</small><strong>How to test a webhook locally</strong><span class="sub">Stripe can't reach localhost. Tunnels, provider CLIs and replays, compared.</span></span>
+      <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg><span class="logo-text">whatis<b>webhook</b></span></a>
+        <p>A visual field guide to webhooks: what they are, how to test them, why they fail, and where they should live.</p>
+      </div>
+      <div class="footer-col"><h2>Chapters</h2><ul>
+        <li><a href="/">01 · What is a webhook?</a></li>
+        <li><a href="/test-webhook-locally.html">02 · Test a webhook locally</a></li>
+        <li><a href="/webhook-not-working.html">03 · Webhook not working</a></li>
+        <li><a href="/verify-webhook-signatures.html">04 · Verify signatures</a></li>
+        <li><a href="/deploy-webhook-receiver.html">05 · Deploy a receiver</a></li>
+        <li><a href="/webhook-tester.html">Tool · Webhook tester</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>Primary sources</h2><ul>
+        <li><a href="https://docs.stripe.com/webhooks" rel="noopener">Stripe · webhooks</a></li>
+        <li><a href="https://docs.github.com/en/webhooks/about-webhooks" rel="noopener">GitHub · about webhooks</a></li>
+        <li><a href="https://shopify.dev/docs/apps/build/webhooks" rel="noopener">Shopify · webhooks</a></li>
+        <li><a href="https://docs.slack.dev/apis/events-api/" rel="noopener">Slack · Events API</a></li>
+        <li><a href="https://www.standardwebhooks.com/" rel="noopener">Standard Webhooks</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>For machines</h2><ul>
+        <li><a href="/llms.txt">llms.txt</a></li>
+        <li><a href="/sitemap.xml">sitemap.xml</a></li>
+        <li><a href="https://cloudish.ai/skill.md" rel="noopener">Cloudish deploy skill</a></li>
+      </ul></div>
+    </div>
+    <div class="titleblock">
+      <div><span>Project</span><strong>What is a webhook? A field guide</strong></div>
+      <div><span>Sheet</span><strong>01 of 05</strong></div>
+      <div><span>Drawing</span><strong>Webhooks</strong></div>
+      <div><span>Rev</span><strong>1.0.0</strong></div>
+      <div><span>Scale</span><strong>1 event : 1 request</strong></div>
+      <div><span>Deployed on</span><strong><a href="https://cloudish.ai/" rel="noopener">Cloudish.ai</a> — not a laptop</strong></div>
+    </div>
+    <div class="footer-legal"><span>© 2026 whatiswebhook.com</span><span>Drawn in blueprint blue. Every request answered from a data center.</span></div>
+  </div>
+</footer>
+<script src="/script.js?v=1.0.0" defer></script>
+<script src="/home.js?v=1.0.0" defer></script>
+</body>
+</html>
