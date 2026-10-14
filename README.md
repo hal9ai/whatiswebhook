@@ -15,6 +15,8 @@ The companion to [whatislocalhost.com](https://whatislocalhost.com), in the same
 | [`deploy-webhook-receiver.html`](public/deploy-webhook-receiver.html) | **Deploy a receiver.** What production needs, a complete receiver with a Dockerfile, cold starts |
 | [`webhook-tester.html`](public/webhook-tester.html) | **Webhook tester.** A public URL that records requests; headers, exact bytes, signature checks, replay |
 
+`public/google174f9c5d30c95756.html` verifies the site in Google Search Console. Don't remove it, or the verification lapses.
+
 [`llms.txt`](public/llms.txt) has a plain-text summary of the key facts for AI agents. [`docs/sources.md`](docs/sources.md) lists every fact the pages state, with the official source it was checked against.
 
 ## Layout
