@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webhook Tester: Get a URL, See Every Request Live (Free, No Signup)</title>
+<meta name="description" content="A free webhook tester. Get a public URL, paste it into Stripe, GitHub, Shopify or Slack, and watch each request arrive live: headers, body, and a signature check that runs in your browser.">
+<link rel="canonical" href="https://whatiswebhook.com/webhook-tester.html">
+<meta name="theme-color" content="#f5f8fd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#061633" media="(prefers-color-scheme: dark)">
+<script src="/theme.js"></script>
+<link rel="preload" href="/fonts/space-grotesk-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-sans-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=1.0.0">
+<link rel="stylesheet" href="/webhook.css?v=1.0.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="whatiswebhook.com">
+<meta property="og:title" content="Webhook tester: watch every request arrive, live">
+<meta property="og:description" content="Get a public URL, paste it into Stripe, GitHub or any service, and see exactly what they send. Free, no signup, nothing written to disk.">
+<meta property="og:url" content="https://whatiswebhook.com/webhook-tester.html">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebApplication",
+      "@id": "https://whatiswebhook.com/webhook-tester.html#app",
+      "name": "Webhook tester",
+      "url": "https://whatiswebhook.com/webhook-tester.html",
+      "description": "Get a public URL that records every HTTP request sent to it, and inspect each one live: method, headers, body, and HMAC signature checks for Stripe, GitHub, Slack, Shopify and Standard Webhooks.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Any",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://whatiswebhook.com/webhook-tester.html#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Who can see the requests sent to my webhook URL?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Anyone who has the URL. It is long and random, so it can't be guessed, but treat it like a password and don't send production data to it. Requests are kept in memory only, for an hour after the URL was last used, and are never written to disk." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does the signing secret leave my browser?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. The signature check runs in your browser with the Web Crypto API. The secret you paste is never sent to the server." }
+        },
+        {
+          "@type": "Question",
+          "name": "Can the tester run my webhook handler?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. It shows you what a provider sends. To run your own code, forward the request to your laptop with a tunnel or a provider CLI, replay a captured request with curl, or deploy your handler to a server with a public URL." }
+        },
+        {
+          "@type": "Question",
+          "name": "How long does a webhook URL last?",
+          "acceptedAnswer": { "@type": "Answer", "text": "An hour after it was last used, and at most 24 hours. It keeps the 50 most recent requests, up to 256 KiB of body each. For a URL that never changes, deploy your own receiver." }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <a class="logo" href="/" aria-label="whatiswebhook.com home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><g class="logo-loop"><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg>
+      <span class="logo-text">whatis<b>webhook</b></span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Chapters">
+      <a href="/"><span class="n">01</span>Webhooks</a>
+      <a href="/test-webhook-locally.html"><span class="n">02</span>Test locally</a>
+      <a href="/webhook-not-working.html"><span class="n">03</span>Troubleshoot</a>
+      <a href="/verify-webhook-signatures.html"><span class="n">04</span>Signatures</a>
+      <a href="/deploy-webhook-receiver.html"><span class="n">05</span>Deploy</a>
+    </nav>
+    <div class="masthead-actions">
+      <button class="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to dark blueprint theme"><span class="knob" aria-hidden="true"></span><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7L7 17M17 7l1.7-1.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/webhook-tester.html" aria-current="page">Webhook tester</a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="bars" aria-hidden="true"></span>Menu</button>
+    </div>
+  </div>
+  <div class="progress" aria-hidden="true"><span></span></div>
+</header>
+
+<main id="main">
+
+<!-- ============ TOOL ============ -->
+<section class="hero hero-tool">
+  <div class="wrap">
+    <p class="kicker"><span class="tag">TOOL</span> Free · no signup · nothing written to disk</p>
+    <h1>Webhook <span class="hl">tester</span></h1>
+    <p class="lede">Paste this URL into Stripe, GitHub, Shopify, Slack or any service that sends webhooks, trigger an event, and watch the request arrive here, byte for byte.</p>
+
+    <div class="wt" data-tester>
+      <div class="wt-url">
+        <label class="wt-url-label" for="wt-url">Your webhook URL</label>
+        <div class="wt-url-row">
+          <input class="field wt-url-field" id="wt-url" type="text" readonly value="Getting a URL…" spellcheck="false">
+          <button class="btn btn-primary" type="button" data-copy-url>Copy</button>
+          <button class="btn" type="button" data-new-url>New URL</button>
+        </div>
+        <p class="wt-status" aria-live="polite"><span class="wt-dot" data-state="connecting"></span><span data-status>Connecting…</span></p>
+        <noscript><p class="note warn"><span class="note-label">JavaScript needed</span>The tester runs in your browser. The guides on this site work without it.</p></noscript>
+      </div>
+
+      <div class="wt-controls">
+        <div class="wt-control">
+          <label for="wt-status">Respond with</label>
+          <select class="field" id="wt-status" data-respond-status>
+            <option value="200">200 OK</option>
+            <option value="201">201 Created</option>
+            <option value="204">204 No Content</option>
+            <option value="400">400 Bad Request</option>
+            <option value="401">401 Unauthorized</option>
+            <option value="404">404 Not Found</option>
+            <option value="410">410 Gone</option>
+            <option value="429">429 Too Many Requests</option>
+            <option value="500">500 Internal Server Error</option>
+            <option value="503">503 Service Unavailable</option>
+          </select>
+        </div>
+        <div class="wt-control">
+          <label for="wt-delay">After</label>
+          <select class="field" id="wt-delay" data-respond-delay>
+            <option value="0">no delay</option>
+            <option value="1000">1 s</option>
+            <option value="3000">3 s</option>
+            <option value="5000">5 s</option>
+            <option value="10000">10 s</option>
+          </select>
+        </div>
+        <p class="wt-hint">Answer with an error or a slow response to watch a provider retry. Most retry anything that isn't a 2xx in time.</p>
+        <div class="wt-control-btns">
+          <button class="btn btn-sm" type="button" data-send-test>Send a test request</button>
+          <button class="btn btn-sm btn-ghost" type="button" data-clear>Clear</button>
+        </div>
+      </div>
+
+      <div class="wt-work">
+        <div class="wt-list" aria-label="Captured requests">
+          <div class="wt-list-head"><span>Requests</span><span data-count>0</span></div>
+          <ol class="wt-items" data-items></ol>
+          <div class="wt-empty" data-empty>
+            <p><strong>Waiting for the first request.</strong></p>
+            <p>Send one from your terminal:</p>
+            <div class="cmd"><span class="p">$</span><code data-curl-sample>curl -X POST …</code></div>
+          </div>
+        </div>
+        <div class="wt-detail" data-detail hidden>
+          <div class="wt-detail-head">
+            <span class="wt-method" data-d-method>POST</span>
+            <code class="wt-path" data-d-path>/</code>
+            <span class="wt-meta" data-d-meta></span>
+          </div>
+          <div class="tabs" data-tabs>
+            <div class="tab-list" role="tablist" aria-label="Request details">
+              <button class="tab" role="tab" type="button" id="wt-t-body" aria-controls="wt-p-body">Body</button>
+              <button class="tab" role="tab" type="button" id="wt-t-headers" aria-controls="wt-p-headers">Headers</button>
+              <button class="tab" role="tab" type="button" id="wt-t-sig" aria-controls="wt-p-sig">Signature</button>
+              <button class="tab" role="tab" type="button" id="wt-t-replay" aria-controls="wt-p-replay">Replay locally</button>
+            </div>
+            <div class="tab-panel" role="tabpanel" id="wt-p-body" aria-labelledby="wt-t-body">
+              <div class="code wt-code"><div class="code-head"><span data-d-body-label>Body</span></div><pre><code data-d-body></code></pre></div>
+              <div class="table-wrap wt-form" data-d-form hidden><table><thead><tr><th scope="col">Form field</th><th scope="col">Value</th></tr></thead><tbody></tbody></table></div>
+            </div>
+            <div class="tab-panel" role="tabpanel" id="wt-p-headers" aria-labelledby="wt-t-headers">
+              <div class="table-wrap wt-headers"><table><thead><tr><th scope="col">Header</th><th scope="col">Value</th></tr></thead><tbody data-d-headers></tbody></table></div>
+              <p class="fineprint">Dimmed headers were added on the way in by the proxy in front of this site, not by the sender.</p>
+            </div>
+            <div class="tab-panel" role="tabpanel" id="wt-p-sig" aria-labelledby="wt-t-sig">
+              <div class="wt-sig">
+                <div class="wt-control">
+                  <label for="wt-provider">Scheme</label>
+                  <select class="field" id="wt-provider" data-sig-provider>
+                    <option value="stripe">Stripe (Stripe-Signature)</option>
+                    <option value="github">GitHub (X-Hub-Signature-256)</option>
+                    <option value="slack">Slack (X-Slack-Signature)</option>
+                    <option value="shopify">Shopify (X-Shopify-Hmac-Sha256)</option>
+                    <option value="standard">Standard Webhooks (webhook-signature)</option>
+                  </select>
+                </div>
+                <div class="wt-control wt-grow">
+                  <label for="wt-secret">Signing secret</label>
+                  <input class="field" id="wt-secret" type="password" autocomplete="off" spellcheck="false" placeholder="whsec_… or your app's secret" data-sig-secret>
+                </div>
+                <button class="btn btn-primary" type="button" data-sig-check>Check</button>
+              </div>
+              <p class="fineprint">The check runs in your browser with the Web Crypto API. Your secret never leaves this page. <a href="/verify-webhook-signatures.html">How each scheme works →</a></p>
+              <div class="wt-sig-out" data-sig-out aria-live="polite"></div>
+            </div>
+            <div class="tab-panel" role="tabpanel" id="wt-p-replay" aria-labelledby="wt-t-replay">
+              <p>Send this exact request to the handler running on your laptop. Change the port and path to match yours.</p>
+              <div class="code"><div class="code-head"><span>Terminal · replay to localhost</span></div><pre><code data-d-replay></code></pre></div>
+              <p class="fineprint">Signed requests carry a timestamp, and most libraries reject ones older than about five minutes. Replay soon after capture, or turn the tolerance up in development only.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="wt-privacy"><strong>Anyone with this URL can see what's sent to it.</strong> It can't be guessed, but don't send production data. Requests stay in memory for an hour after the URL was last used, never on disk. The tester is open source.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROVIDERS ============ -->
+<section class="section section-rule" id="providers" aria-labelledby="prov-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 01</span> Point a provider at it</p>
+      <h2 id="prov-h">Where to paste the URL</h2>
+      <p>Every service that sends webhooks has a place to register an endpoint URL. Use test or sandbox mode while you explore.</p>
+    </div>
+    <div class="tabs" data-tabs>
+      <div class="tab-list" role="tablist" aria-label="Provider">
+        <button class="tab" role="tab" type="button" id="pv-t-stripe" aria-controls="pv-p-stripe">Stripe</button>
+        <button class="tab" role="tab" type="button" id="pv-t-github" aria-controls="pv-p-github">GitHub</button>
+        <button class="tab" role="tab" type="button" id="pv-t-shopify" aria-controls="pv-p-shopify">Shopify</button>
+        <button class="tab" role="tab" type="button" id="pv-t-slack" aria-controls="pv-p-slack">Slack</button>
+        <button class="tab" role="tab" type="button" id="pv-t-any" aria-controls="pv-p-any">Anything else</button>
+      </div>
+      <div class="tab-panel prose" role="tabpanel" id="pv-p-stripe" aria-labelledby="pv-t-stripe">
+        <ol>
+          <li>In the Stripe Dashboard, switch to <strong>test mode</strong> and open <strong>Developers → Webhooks</strong>.</li>
+          <li>Add an endpoint, paste your URL, and pick the events to send, such as <code>payment_intent.succeeded</code>.</li>
+          <li>Send a test event from the endpoint's page, or trigger one with the Stripe CLI: <code>stripe trigger payment_intent.succeeded</code>.</li>
+          <li>To check the signature here, copy the endpoint's signing secret (<code>whsec_…</code>) into the Signature tab.</li>
+        </ol>
+      </div>
+      <div class="tab-panel prose" role="tabpanel" id="pv-p-github" aria-labelledby="pv-t-github">
+        <ol>
+          <li>In your repository, open <strong>Settings → Webhooks → Add webhook</strong>.</li>
+          <li>Paste your URL as the payload URL and set the content type to <code>application/json</code>.</li>
+          <li>Type any secret. GitHub uses it to sign each delivery with <code>X-Hub-Signature-256</code>.</li>
+          <li>Save. GitHub sends a <code>ping</code> event right away, and you'll see it here.</li>
+        </ol>
+      </div>
+      <div class="tab-panel prose" role="tabpanel" id="pv-p-shopify" aria-labelledby="pv-t-shopify">
+        <ol>
+          <li>In your app's configuration, add a webhook subscription for a topic such as <code>orders/create</code>, with your URL as the endpoint.</li>
+          <li>Trigger the topic in a development store, for instance by placing a test order.</li>
+          <li>Shopify signs the body with your app's client secret in <code>X-Shopify-Hmac-Sha256</code>.</li>
+        </ol>
+      </div>
+      <div class="tab-panel prose" role="tabpanel" id="pv-p-slack" aria-labelledby="pv-t-slack">
+        <ol>
+          <li>In your Slack app's settings, open <strong>Event Subscriptions</strong> or <strong>Slash Commands</strong>, and paste your URL as the request URL.</li>
+          <li>For Event Subscriptions, Slack first sends a <code>url_verification</code> request with a <code>challenge</code> and expects it echoed back. The tester does that for you, so the URL verifies.</li>
+          <li>Slash commands arrive as a form (<code>application/x-www-form-urlencoded</code>). The Body tab shows the fields.</li>
+        </ol>
+      </div>
+      <div class="tab-panel prose" role="tabpanel" id="pv-p-any" aria-labelledby="pv-t-any">
+        <p>Any HTTP request works: any method, any path under your URL, any body up to 256 KiB. Try it from a terminal:</p>
+        <div class="code"><div class="code-head"><span>Terminal</span></div><pre><code data-curl-any>curl -X POST "https://whatiswebhook.com/in/&lt;your-id&gt;/orders" \
+  -H "Content-Type: application/json" \
+  -d '{"event":"order.created","id":42}'</code></pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ LIMITS ============ -->
+<section class="section section-rule" id="limits" aria-labelledby="lim-h">
+  <div class="wrap split split-wide">
+    <div class="reveal">
+      <p class="eyebrow"><span class="idx">§ 02</span> What it can't do</p>
+      <h2 id="lim-h">It shows the request. It doesn't run your code.</h2>
+      <div class="prose">
+        <p>A tester answers the first question: <em>what exactly does this provider send?</em> The next one is whether <em>your</em> handler deals with it, and that needs the request to reach your code. There are three ways:</p>
+        <ul>
+          <li><strong>Replay it.</strong> Copy a captured request from the Replay tab and send it to your laptop with <code>curl</code>.</li>
+          <li><strong>Forward it.</strong> A tunnel or a provider CLI gives your laptop a public URL while you develop. See <a href="/test-webhook-locally.html">how to test a webhook locally</a>.</li>
+          <li><strong>Deploy it.</strong> Once the handler works, it needs a home that is always on, with a URL that never changes. See <a href="/deploy-webhook-receiver.html">deploy a webhook receiver</a>.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="reveal reveal-d1">
+      <p class="eyebrow"><span class="idx">Spec sheet</span> This tester</p>
+      <dl class="facts">
+        <dt>Cost</dt><dd>Free, no account</dd>
+        <dt>Kept for</dt><dd>1 hour after last use, 24 hours at most</dd>
+        <dt>Stored</dt><dd>In memory only, never on disk</dd>
+        <dt>Requests per URL</dt><dd>The 50 most recent</dd>
+        <dt>Body size</dt><dd>Up to 256 KiB recorded, longer bodies are cut and flagged</dd>
+        <dt>Rate</dt><dd>120 requests a minute per URL</dd>
+        <dt>Signature checks</dt><dd>In your browser: Stripe, GitHub, Slack, Shopify, Standard Webhooks</dd>
+        <dt>Runs on</dt><dd><a href="https://cloudish.ai/" rel="noopener">Cloudish.ai</a></dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GO LIVE ============ -->
+<section class="section section-rule" id="go-live" aria-labelledby="lp-h">
+  <div class="wrap">
+    <div class="launchpad reveal" data-launchpad data-tpl="Build me a webhook receiver for {idea}. It should verify the provider's signature over the raw request body, reject requests older than five minutes, answer 200 quickly and do the work after, and ignore duplicate event IDs. Add a Dockerfile, deploy it to cloudish.ai using the instructions at https://cloudish.ai/skill.md, and send me the live URL to paste into the provider. If you can't run commands yourself, give me the exact steps to run in my terminal.">
+      <div class="lp-head">
+        <div>
+          <p class="eyebrow"><span class="idx">§ 03</span> Beyond testing</p>
+          <h2 id="lp-h">Seen enough requests?<br>Give your handler a real URL.</h2>
+        </div>
+        <span class="badge">One sentence · no dashboard</span>
+      </div>
+      <div class="lp-grid">
+        <div class="lp-card">
+          <span class="lp-step"><i>A</i> Already have a handler?</span>
+          <h3>Ask your coding agent</h3>
+          <p>Open a terminal in your project folder and paste one of these. The agent packages your code, deploys it, and hands you back a permanent HTTPS URL to register with the provider.</p>
+          <div class="cmd"><span class="p">$</span><code>claude "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <div class="cmd"><span class="p">$</span><code>codex "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <p class="fineprint">Works with Claude Code, Codex, and other coding agents that can run commands.</p>
+        </div>
+        <div class="lp-card">
+          <span class="lp-step"><i>B</i> Starting from zero?</span>
+          <h3>Have one built and deployed</h3>
+          <label class="visually-hidden" for="idea-tester">Which webhooks should it receive?</label>
+          <input class="field" id="idea-tester" data-idea type="text" placeholder="Stripe payment events that email me each new sale" autocomplete="off">
+          <div class="chips" style="margin:10px 0 4px">
+            <button type="button" class="chip" data-idea-chip="GitHub push events that post a summary to a Discord channel" aria-pressed="false">GitHub → Discord</button>
+            <button type="button" class="chip" data-idea-chip="Shopify orders that append a row to a Google Sheet" aria-pressed="false">Shopify → Sheet</button>
+            <button type="button" class="chip" data-idea-chip="Stripe subscription events that update a small Postgres table" aria-pressed="false">Stripe → database</button>
+          </div>
+          <div class="ai-buttons">
+            <a class="ai-btn" data-ai="chatgpt" href="https://chatgpt.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true">G</span><span>ChatGPT<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="claude" href="https://claude.ai/new" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#c2410c">C</span><span>Claude<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="grok" href="https://grok.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#334155">X</span><span>Grok<small>Open with prompt</small></span></a>
+          </div>
+          <p class="fineprint">Chat assistants deploy for you when they can run code with internet access; otherwise they'll give you the exact commands. <a href="/deploy-webhook-receiver.html">What a good receiver needs →</a></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="section section-rule" id="faq" aria-labelledby="faq-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 04</span> FAQ</p>
+      <h2 id="faq-h">Frequently asked questions</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>Who can see the requests sent to my webhook URL?</summary>
+        <div class="faq-a"><p>Anyone who has the URL. It is long and random, so it can't be guessed, but treat it like a password and don't send production data to it. Requests are kept in memory only, for an hour after the URL was last used, and are never written to disk.</p></div>
+      </details>
+      <details>
+        <summary>Does the signing secret leave my browser?</summary>
+        <div class="faq-a"><p>No. The signature check runs in your browser with the Web Crypto API. The secret you paste is never sent to the server.</p></div>
+      </details>
+      <details>
+        <summary>Can the tester run my webhook handler?</summary>
+        <div class="faq-a"><p>No. It shows you what a provider sends. To run your own code, forward the request to your laptop with a tunnel or a provider CLI, replay a captured request with curl, or deploy your handler to a server with a public URL. <a href="/test-webhook-locally.html">All three, compared</a>.</p></div>
+      </details>
+      <details>
+        <summary>How long does a webhook URL last?</summary>
+        <div class="faq-a"><p>An hour after it was last used, and at most 24 hours. It keeps the 50 most recent requests, up to 256 KiB of body each. For a URL that never changes, <a href="/deploy-webhook-receiver.html">deploy your own receiver</a>.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="section-tight" aria-label="Next chapter">
+  <div class="wrap">
+    <a class="next-chapter reveal" href="/test-webhook-locally.html">
+      <span><small>Guide · Chapter 02</small><strong>How to test a webhook locally</strong><span class="sub">Stripe can't reach localhost. Tunnels, provider CLIs and replays, compared.</span></span>
+      <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg><span class="logo-text">whatis<b>webhook</b></span></a>
+        <p>A visual field guide to webhooks: what they are, how to test them, why they fail, and where they should live.</p>
+      </div>
+      <div class="footer-col"><h2>Chapters</h2><ul>
+        <li><a href="/">01 · What is a webhook?</a></li>
+        <li><a href="/test-webhook-locally.html">02 · Test a webhook locally</a></li>
+        <li><a href="/webhook-not-working.html">03 · Webhook not working</a></li>
+        <li><a href="/verify-webhook-signatures.html">04 · Verify signatures</a></li>
+        <li><a href="/deploy-webhook-receiver.html">05 · Deploy a receiver</a></li>
+        <li><a href="/webhook-tester.html">Tool · Webhook tester</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>The series</h2><ul>
+        <li><a href="https://whatislocalhost.com/" rel="noopener">whatislocalhost.com</a></li>
+        <li><a href="/">whatiswebhook.com</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>For machines</h2><ul>
+        <li><a href="/llms.txt">llms.txt</a></li>
+        <li><a href="/sitemap.xml">sitemap.xml</a></li>
+        <li><a href="https://cloudish.ai/skill.md" rel="noopener">Cloudish deploy skill</a></li>
+      </ul></div>
+    </div>
+    <div class="titleblock">
+      <div><span>Project</span><strong>What is a webhook? A field guide</strong></div>
+      <div><span>Sheet</span><strong>Tool</strong></div>
+      <div><span>Drawing</span><strong>Webhook tester</strong></div>
+      <div><span>Rev</span><strong>1.0.0</strong></div>
+      <div><span>Scale</span><strong>1 request : 1 request</strong></div>
+      <div><span>Deployed on</span><strong><a href="https://cloudish.ai/" rel="noopener">Cloudish.ai</a> — not a laptop</strong></div>
+    </div>
+    <div class="footer-legal"><span>© 2026 whatiswebhook.com</span><span>Drawn in blueprint blue. Every request answered from a data center.</span></div>
+  </div>
+</footer>
+<script src="/script.js?v=1.0.0" defer></script>
+<script src="/tester.js?v=1.0.0" defer></script>
+</body>
+</html>

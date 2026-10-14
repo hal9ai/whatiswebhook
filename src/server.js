@@ -47,6 +47,16 @@ const CSP = [
 
 const BIN_CREATES_PER_HOUR = 30;
 
+function slackChallenge(body) {
+  if (!body || !body.includes('url_verification')) return null;
+  try {
+    const j = JSON.parse(body);
+    return j && j.type === 'url_verification' && typeof j.challenge === 'string' ? j.challenge : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createServer({ store = new BinStore(), origin = process.env.PUBLIC_ORIGIN } = {}) {
   const creates = new Map();
 
@@ -161,6 +171,13 @@ export function createServer({ store = new BinStore(), origin = process.env.PUBL
     if (req.method === 'OPTIONS') {
       head['access-control-allow-methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
       head['access-control-allow-headers'] = req.headers['access-control-request-headers'] || '*';
+    }
+    // Slack's Events API verifies a URL by sending a challenge it expects back.
+    const challenge = status < 300 && slackChallenge(body);
+    if (challenge) {
+      head['content-type'] = 'application/json; charset=utf-8';
+      res.writeHead(200, head);
+      return res.end(JSON.stringify({ challenge }));
     }
     res.writeHead(status, head);
     res.end(status < 300 ? 'ok\n' : `Simulated ${status}, set in the webhook tester.\n`);

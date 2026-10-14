@@ -143,3 +143,15 @@ test('static pages carry a CSP; dotfiles and paths outside public/ are not serve
   assert.equal((await fetch(`${base}/%2e%2e/package.json`)).status, 404);
   await close();
 });
+
+test("Slack's url_verification challenge is echoed back", async () => {
+  const { base, close } = await start();
+  const bin = await newBin(base);
+  const res = await fetch(bin.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: 't', challenge: 'abc123', type: 'url_verification' }),
+  });
+  assert.deepEqual(await res.json(), { challenge: 'abc123' });
+  await close();
+});
