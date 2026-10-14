@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to Test a Webhook Locally: Stripe, GitHub, ngrok & Free Options Compared</title>
+<meta name="description" content="Stripe and GitHub can't reach localhost. Four ways to test webhooks on your laptop (provider CLIs, tunnels, capture and replay, a dev deploy), what each costs, and the traps that break signatures.">
+<link rel="canonical" href="https://whatiswebhook.com/test-webhook-locally.html">
+<meta name="theme-color" content="#f5f8fd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#061633" media="(prefers-color-scheme: dark)">
+<script src="/theme.js"></script>
+<link rel="preload" href="/fonts/space-grotesk-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-sans-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=1.0.0">
+<link rel="stylesheet" href="/webhook.css?v=1.0.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="whatiswebhook.com">
+<meta property="og:title" content="How to test a webhook locally">
+<meta property="og:description" content="Stripe can't reach localhost. Provider CLIs, tunnels, capture-and-replay and a dev deploy, compared, plus the traps that break signatures.">
+<meta property="og:url" content="https://whatiswebhook.com/test-webhook-locally.html">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "@id": "https://whatiswebhook.com/test-webhook-locally.html#article",
+      "headline": "How to test a webhook locally",
+      "description": "Webhook providers send requests from the internet, and localhost isn't on the internet. Four ways to bridge the gap while you develop, compared, and the traps that break signature checks.",
+      "url": "https://whatiswebhook.com/test-webhook-locally.html",
+      "datePublished": "2026-10-14",
+      "dateModified": "2026-10-14",
+      "inLanguage": "en",
+      "isPartOf": { "@type": "WebSite", "name": "whatiswebhook.com", "url": "https://whatiswebhook.com/" },
+      "about": [
+        { "@type": "Thing", "name": "Webhook" },
+        { "@type": "Thing", "name": "localhost" },
+        { "@type": "Thing", "name": "Tunneling (computer networking)" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://whatiswebhook.com/test-webhook-locally.html#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Can Stripe send webhooks to localhost?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Not directly. Stripe sends webhooks from its servers on the internet, and localhost only exists on your own computer. Use the Stripe CLI (stripe listen --forward-to localhost:3000/webhook), which receives events over an outbound connection and forwards them to your machine." }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need ngrok to test webhooks?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. If the provider has a CLI that forwards events (Stripe, GitHub), use that. For anything else, a Cloudflare Quick Tunnel needs no account, and you can capture a real request with a webhook tester and replay it to localhost with curl." }
+        },
+        {
+          "@type": "Question",
+          "name": "Why does webhook signature verification fail locally?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Usually one of three things: your framework parsed the JSON before you verified it, so the bytes changed; you're using the dashboard's signing secret while the events come through a CLI that signs with its own; or a relay re-encoded the body on the way. Verify against the raw body with the secret of the path the event actually took." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does GitHub retry failed webhook deliveries?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. GitHub does not automatically redeliver failed deliveries; you redeliver them from the webhook's Recent Deliveries tab or the REST API. Stripe, Shopify and Slack do retry, so a slow or failing local handler gets the same event again." }
+        },
+        {
+          "@type": "Question",
+          "name": "Why do I get duplicate webhooks when debugging?",
+          "acceptedAnswer": { "@type": "Answer", "text": "A breakpoint holds the request open past the provider's time limit (3 seconds for Slack, 5 for Shopify, 10 for GitHub), so the provider marks the delivery failed and retries it. Answer 2xx first and do the work afterwards, and ignore event IDs you've already handled." }
+        },
+        {
+          "@type": "Question",
+          "name": "Is it safe to expose localhost with a tunnel?",
+          "acceptedAnswer": { "@type": "Answer", "text": "A tunnel URL is public: anyone who finds it can send requests to your laptop. Verify signatures even in development, don't expose admin routes on the same port, and close the tunnel when you're done." }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--stroke-2);stroke-width:1"/></pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--stroke)"/></marker>
+    <marker id="arr-sig" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--signal)"/></marker>
+    <marker id="arr-ok" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--ok)"/></marker>
+  </defs>
+</svg>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <a class="logo" href="/" aria-label="whatiswebhook.com home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><g class="logo-loop"><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg>
+      <span class="logo-text">whatis<b>webhook</b></span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Chapters">
+      <a href="/"><span class="n">01</span>Webhooks</a>
+      <a href="/test-webhook-locally.html" aria-current="page"><span class="n">02</span>Test locally</a>
+      <a href="/webhook-not-working.html"><span class="n">03</span>Troubleshoot</a>
+      <a href="/verify-webhook-signatures.html"><span class="n">04</span>Signatures</a>
+      <a href="/deploy-webhook-receiver.html"><span class="n">05</span>Deploy</a>
+    </nav>
+    <div class="masthead-actions">
+      <button class="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to dark blueprint theme"><span class="knob" aria-hidden="true"></span><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7L7 17M17 7l1.7-1.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/webhook-tester.html">Webhook tester</a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="bars" aria-hidden="true"></span>Menu</button>
+    </div>
+  </div>
+  <div class="progress" aria-hidden="true"><span></span></div>
+</header>
+
+<main id="main">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="kicker"><span class="tag">CH. 02</span> A field guide · from the internet to localhost</p>
+      <h1>How to test a <span class="hl">webhook</span> locally</h1>
+      <p class="lede">Stripe, GitHub and every other provider send webhooks from the internet. Your <code>localhost</code> isn't on the internet. Here are the four ways to bridge that gap while you develop, what each one shows to whom, and the traps that make signatures fail on your laptop but nowhere else.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#four-ways">Compare the four ways <span class="arr" aria-hidden="true">↓</span></a>
+        <a class="btn" href="/webhook-tester.html">Get a test URL now</a>
+      </div>
+      <dl class="readouts">
+        <div><dt>Can Stripe reach localhost:3000?</dt><dd>No</dd></div>
+        <div><dt>Ways around it</dt><dd>4</dd></div>
+        <div><dt>Slowest answer allowed</dt><dd>3–10 <small>s</small></dd></div>
+      </dl>
+    </div>
+
+    <figure class="fig hero-fig corners" data-crosshair>
+      <div class="fig-bar"><span><b>Fig. 01</b> — why the webhook never arrives, and the way around</span><span class="live">Live</span></div>
+      <svg class="dg anim" viewBox="0 0 600 450" role="img" aria-labelledby="f1t f1d">
+        <title id="f1t">A webhook can't reach localhost directly, but a tunnel gets it there</title>
+        <desc id="f1d">A provider's server in a data center tries to send a request straight to a laptop. The home router drops it, because nothing on the internet can open a connection to a laptop behind it, and localhost only exists on the laptop. Below, the laptop opens an outbound connection to a tunnel's public edge. The provider sends the webhook to the edge's public URL, and the request travels back down the connection the laptop opened.</desc>
+        <!-- provider -->
+        <rect class="bg" x="24" y="30" width="190" height="96" rx="8"/><rect class="ln" x="24" y="30" width="190" height="96" rx="8"/>
+        <path class="ln-3" d="M24 52 H214"/>
+        <text class="tx-3" x="36" y="45">DATA CENTER · THE INTERNET</text>
+        <text class="big" x="36" y="84">Stripe</text>
+        <text class="tx-2" x="36" y="108">POST /webhook · evt_1Q…</text>
+
+        <!-- router -->
+        <rect class="bg" x="296" y="44" width="140" height="68" rx="8"/><rect class="ln" x="296" y="44" width="140" height="68" rx="8"/>
+        <text class="tx-3" x="316" y="62">YOUR ROUTER</text>
+        <text class="tx" x="316" y="84">NAT · firewall</text>
+        <text class="tx-2" x="316" y="101">drops unsolicited</text>
+
+        <!-- laptop -->
+        <rect class="bg-blue" x="456" y="30" width="122" height="96" rx="8"/><rect class="ln" x="456" y="30" width="122" height="96" rx="8"/>
+        <text class="tx-3" x="468" y="48">YOUR LAPTOP</text>
+        <text class="tx" x="468" y="74">localhost</text>
+        <text class="tx" x="468" y="92">:3000</text>
+        <text class="tx-2" x="468" y="112">/webhook</text>
+
+        <!-- direct: blocked -->
+        <path class="ln-err dash" d="M214 78 H285"/>
+        <g transform="translate(296 78)"><circle r="11" style="fill:var(--surface)"/><circle class="ln-err" r="11"/><path class="ln-err" d="M-4.5 -4.5 L4.5 4.5 M4.5 -4.5 L-4.5 4.5"/></g>
+        <text class="lbl-err" x="24" y="150">✕ NO WAY IN: THE ROUTER DROPS IT</text>
+        <text class="tx-3" x="24" y="166">AND "localhost" WOULD MEAN STRIPE'S OWN SERVER</text>
+
+        <path class="ln-3" d="M20 186 H580"/>
+        <text class="tx-3" x="24" y="210">THE WAY AROUND · YOUR LAPTOP DIALS OUT FIRST</text>
+
+        <!-- tunnel edge -->
+        <rect class="bg" x="200" y="246" width="200" height="88" rx="8"/><rect class="ln" x="200" y="246" width="200" height="88" rx="8"/>
+        <path class="ln-3" d="M200 268 H400"/>
+        <text class="tx-3" x="212" y="261">TUNNEL EDGE · PUBLIC</text>
+        <text class="tx" x="212" y="292">https://abc.example-</text>
+        <text class="tx" x="212" y="310">tunnel.dev/webhook</text>
+        <text class="tx-2" x="212" y="326">or: stripe listen</text>
+
+        <!-- provider 2 + laptop 2 -->
+        <rect class="bg" x="24" y="254" width="130" height="72" rx="8"/><rect class="ln" x="24" y="254" width="130" height="72" rx="8"/>
+        <text class="tx-3" x="36" y="272">PROVIDER</text>
+        <text class="big" x="36" y="306" style="font-size:19px">Stripe</text>
+        <rect class="bg-blue" x="446" y="246" width="132" height="88" rx="8"/><rect class="ln" x="446" y="246" width="132" height="88" rx="8"/>
+        <text class="tx-3" x="458" y="264">YOUR LAPTOP</text>
+        <text class="tx" x="458" y="292">tunnel client</text>
+        <text class="tx" x="458" y="312">→ :3000</text>
+
+        <!-- outbound connection opened by the laptop -->
+        <path class="ln-2 dash" d="M446 372 H300 V334" marker-end="url(#arr)"/>
+        <text class="tx-3" x="300" y="392">1 · THE LAPTOP DIALS OUT TO THE EDGE</text>
+        <!-- webhook path -->
+        <path class="ln-sig flow" d="M154 290 H196" marker-end="url(#arr-sig)"/>
+        <path class="ln-sig flow" d="M400 290 H442" marker-end="url(#arr-sig)"/>
+        <text class="lbl-sig" x="24" y="356">2 · WEBHOOK TO THE PUBLIC URL</text>
+        <text class="lbl-ok" x="24" y="430">3 · DELIVERED DOWN THE SAME CONNECTION → 200 OK</text>
+        <path id="tun-req" d="M154 290 H446" fill="none"/>
+        <g class="pkt"><circle class="pkt-halo" r="10"/><circle class="pkt-core" r="4.6"/>
+          <animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.6;1" calcMode="linear"><mpath href="#tun-req"/></animateMotion>
+          <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;.6;.62;1" dur="4s" repeatCount="indefinite"/>
+        </g>
+        <path id="dir-req" d="M214 78 H290" fill="none"/>
+        <g class="pkt"><circle class="pkt-halo" r="10"/><circle class="pkt-core" r="4.6"/>
+          <animateMotion dur="4s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.35;1" calcMode="linear"><mpath href="#dir-req"/></animateMotion>
+          <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;.35;.37;1" dur="4s" repeatCount="indefinite"/>
+        </g>
+      </svg>
+      <figcaption>Top: the request (<span style="color:var(--signal)">●</span>) has nowhere to go. Your router only lets in replies to connections your laptop started, and if you typed <code>localhost</code> into the provider's settings, it points at the provider's own machine. Bottom: a tunnel or provider CLI has your laptop start the connection, so the webhook can ride back down it.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ QUICK ANSWER ============ -->
+<section class="section section-tight" id="quick-answer" aria-labelledby="qa-h">
+  <div class="wrap split split-wide">
+    <div class="reveal">
+      <p class="eyebrow"><span class="idx">§ 01</span> The short answer</p>
+      <h2 id="qa-h">Testing webhooks locally, in one paragraph</h2>
+      <div class="answer">
+        <span class="answer-label">Quick answer</span>
+        <p>A provider can't call <code>localhost</code>, so something has to give your laptop a public address or carry the events to it. <strong>If the provider has a CLI that forwards events</strong> (Stripe, GitHub), use it: <code>stripe listen --forward-to localhost:3000/webhook</code>. <strong>Otherwise, run a tunnel</strong> such as ngrok or a Cloudflare Quick Tunnel, and register its public URL with the provider.</p>
+        <p>To see a real payload before you write any code, <a href="/webhook-tester.html">capture one with a webhook tester</a> and replay it to localhost with <code>curl</code>. And once the handler works, stop tunneling: <a href="/deploy-webhook-receiver.html">deploy it</a> to a URL that doesn't depend on your laptop being awake.</p>
+      </div>
+    </div>
+    <div class="reveal reveal-d1">
+      <p class="eyebrow"><span class="idx">Spec sheet</span> Key facts</p>
+      <dl class="facts">
+        <dt>Why it fails</dt><dd>localhost exists only on your machine; routers drop unsolicited inbound connections</dd>
+        <dt>Best fix</dt><dd>The provider's own CLI, when it has one</dd>
+        <dt>Any provider</dt><dd>A tunnel to localhost:3000</dd>
+        <dt>Time to answer</dt><dd>Slack 3 s · Shopify 5 s · GitHub 10 s</dd>
+        <dt>Retries</dt><dd>Stripe up to 3 days (live) · Shopify 8 times in 4 h · Slack 3 times · GitHub none</dd>
+        <dt>Signatures</dt><dd>Over the raw bytes; parsing first breaks them</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOUR WAYS ============ -->
+<section class="section section-rule" id="four-ways" aria-labelledby="ways-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 02</span> Your options</p>
+      <h2 id="ways-h">Four ways to get a webhook to your laptop</h2>
+      <p>They aren't rivals. Most people use two or three at different moments: capture to see the payload, forward while coding, deploy when it's done.</p>
+    </div>
+    <div class="cards cards-2x">
+      <article class="card reveal">
+        <span class="card-idx">A · Best when available</span>
+        <h3>The provider's own CLI</h3>
+        <p>Stripe and GitHub ship command-line tools that log in to your account, receive events over an outbound connection, and forward them to a local URL. No public URL to register, and the events are real.</p>
+        <p><strong>Use it for</strong> Stripe (<code>stripe listen</code>) and GitHub repository or organization webhooks (<code>gh webhook forward</code>).</p>
+        <p class="fineprint">Watch out: <code>stripe listen</code> signs with its own secret, not your dashboard endpoint's. <code>gh webhook forward</code> works for one person per repository at a time, and not for GitHub App webhooks.</p>
+      </article>
+      <article class="card reveal reveal-d1">
+        <span class="card-idx">B · Any provider</span>
+        <h3>A tunnel</h3>
+        <p>A small client on your laptop dials out to a public edge, which gives you an HTTPS URL. Requests to that URL come back down the connection to <code>localhost:3000</code>. You register the URL with the provider like any endpoint.</p>
+        <p><strong>Use it for</strong> providers without a CLI, and for testing the whole path including your route and middleware.</p>
+        <p class="fineprint">Watch out: the URL is public, and some tunnels hand out a new one every run, which you then re-register.</p>
+      </article>
+      <article class="card reveal">
+        <span class="card-idx">C · Before you write code</span>
+        <h3>Capture, then replay</h3>
+        <p>Point the provider at a <a href="/webhook-tester.html">webhook tester</a>, trigger an event, and read exactly what arrives. Then replay that request against your handler with <code>curl</code>, as often as you like, without triggering anything.</p>
+        <p><strong>Use it for</strong> learning a payload's shape, saving fixtures for tests, and debugging one tricky event.</p>
+        <p class="fineprint">Watch out: signed requests carry a timestamp. Libraries reject them after about five minutes, so replays of old captures fail verification by design.</p>
+      </article>
+      <article class="card reveal reveal-d1">
+        <span class="card-idx">D · When it has to keep working</span>
+        <h3>Deploy a dev receiver</h3>
+        <p>Run the handler on a server with a permanent URL, in a sandbox or staging setup. It receives events when your laptop is closed, and the URL never changes, so you register it once.</p>
+        <p><strong>Use it for</strong> anything a teammate, a demo or a long-running integration depends on.</p>
+        <p class="fineprint">Watch out: you lose your local debugger. Log each event's ID and type so you can follow along.</p>
+      </article>
+    </div>
+    <div class="note warn reveal" style="margin-top:28px"><span class="note-label">Relays that re-encode bodies</span>Some free relays forward a webhook by parsing its JSON and writing it out again. The smee.io client does this: whitespace and escapes can change, form bodies turn into JSON, and the HMAC signature over the original bytes no longer matches (<a href="https://github.com/probot/smee-client/issues/325" rel="noopener">smee-client#325</a>). It's fine for seeing events; for signature checks, use the provider's CLI or a tunnel.</div>
+  </div>
+</section>
+
+<!-- ============ COMPARE ============ -->
+<section class="section section-rule" id="compare" aria-labelledby="cmp-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 03</span> Side by side</p>
+      <h2 id="cmp-h">ngrok vs Cloudflare Tunnel vs Stripe CLI vs the rest</h2>
+      <p>What each tool needs, how long its URL lasts, and who can see your payloads. Checked against each vendor's documentation in October 2026; free plans change, so follow the links before you rely on a limit.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead><tr><th scope="col">Tool</th><th scope="col">Type</th><th scope="col">Account</th><th scope="col">URL lasts</th><th scope="col">Runs your code</th><th scope="col">Signatures check out</th><th scope="col">Worth knowing</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><a href="https://docs.stripe.com/cli/listen" rel="noopener">Stripe CLI</a></th><td>Provider CLI</td><td>Stripe</td><td>No URL needed</td><td>Yes</td><td>Yes, with the CLI's own <code>whsec_</code></td><td><code>stripe trigger</code> sends test events on demand</td></tr>
+          <tr><th scope="row"><a href="https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/using-the-github-cli-to-forward-webhooks-for-testing" rel="noopener">gh webhook forward</a></th><td>Provider CLI</td><td>GitHub</td><td>No URL needed</td><td>Yes</td><td>Only if you pass <code>--secret</code></td><td>Repo and org webhooks only; one user per repo at a time</td></tr>
+          <tr><th scope="row"><a href="https://ngrok.com/docs/pricing-limits/free-plan-limits/" rel="noopener">ngrok</a></th><td>Tunnel</td><td>Free account</td><td>Stable: one free dev domain</td><td>Yes</td><td>Yes</td><td>Free plan: 20,000 requests a month; browser warning page doesn't affect webhooks</td></tr>
+          <tr><th scope="row"><a href="https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/" rel="noopener">Cloudflare Quick Tunnel</a></th><td>Tunnel</td><td>None</td><td>New URL every run</td><td>Yes</td><td>Yes</td><td>For testing only; up to 200 requests in flight</td></tr>
+          <tr><th scope="row"><a href="https://tailscale.com/kb/1223/funnel" rel="noopener">Tailscale Funnel</a></th><td>Tunnel</td><td>Tailscale</td><td>Stable while the device name is</td><td>Yes</td><td>Yes</td><td>Beta; public ports 443, 8443 and 10000 only</td></tr>
+          <tr><th scope="row"><a href="https://github.com/probot/smee.io" rel="noopener">smee.io</a></th><td>Relay</td><td>None</td><td>Stable channel</td><td>Yes</td><td>Often not: re-encodes the body</td><td>Anyone with the channel URL sees payloads</td></tr>
+          <tr><th scope="row"><a href="/webhook-tester.html">Webhook tester</a></th><td>Capture</td><td>None</td><td>1 hour after last use</td><td>No; replay with curl</td><td>Checks them in your browser</td><td>Shows the exact bytes and headers</td></tr>
+          <tr><th scope="row"><a href="/deploy-webhook-receiver.html">A deployed receiver</a></th><td>Deploy</td><td>Depends on the host</td><td>Permanent</td><td>Yes</td><td>Yes</td><td>Keeps working with your laptop closed</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">Also: the <a href="https://github.com/svix/svix-webhooks/tree/main/svix-cli" rel="noopener">Svix CLI</a>'s <code>svix listen http://localhost:3000/webhook</code> gives a public relay URL with no account, and forwards POST requests.</p>
+  </div>
+</section>
+
+<!-- ============ STEP BY STEP ============ -->
+<section class="section section-rule" id="step-by-step" aria-labelledby="sbs-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 04</span> Step by step</p>
+      <h2 id="sbs-h">The commands, for each way</h2>
+      <p>All of them assume your app listens on port 3000 and handles webhooks at <code>/webhook</code>. Change both to match yours.</p>
+    </div>
+    <div class="tabs" data-tabs>
+      <div class="tab-list" role="tablist" aria-label="Method">
+        <button class="tab" role="tab" type="button" id="s-t-stripe" aria-controls="s-p-stripe">Stripe CLI</button>
+        <button class="tab" role="tab" type="button" id="s-t-gh" aria-controls="s-p-gh">GitHub CLI</button>
+        <button class="tab" role="tab" type="button" id="s-t-ngrok" aria-controls="s-p-ngrok">ngrok</button>
+        <button class="tab" role="tab" type="button" id="s-t-cf" aria-controls="s-p-cf">Cloudflare</button>
+        <button class="tab" role="tab" type="button" id="s-t-replay" aria-controls="s-p-replay">Capture &amp; replay</button>
+      </div>
+      <div class="tab-panel" role="tabpanel" id="s-p-stripe" aria-labelledby="s-t-stripe"><p class="tab-title">Stripe CLI</p><div class="code"><div class="code-head"><span>Terminal</span></div><pre><code><span class="c"># Once: log in to your Stripe account</span>
+stripe login
+
+<span class="c"># Forward events to your handler. It prints a signing secret:</span>
+<span class="c"># "Your webhook signing secret is whsec_…" — use that one locally</span>
+stripe listen --forward-to localhost:3000/webhook
+
+<span class="c"># In a second terminal: send a test event</span>
+stripe trigger payment_intent.succeeded</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="s-p-gh" aria-labelledby="s-t-gh"><p class="tab-title">GitHub CLI</p><div class="code"><div class="code-head"><span>Terminal</span></div><pre><code><span class="c"># Once: install the extension</span>
+gh extension install cli/gh-webhook
+
+<span class="c"># Forward a repository's issue events to your handler.</span>
+<span class="c"># --secret makes GitHub sign deliveries, so you can test verification.</span>
+gh webhook forward --repo=OWNER/REPO --events=issues \
+  --url=http://localhost:3000/webhook --secret=dev-secret</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="s-p-ngrok" aria-labelledby="s-t-ngrok"><p class="tab-title">ngrok</p><div class="code"><div class="code-head"><span>Terminal</span></div><pre><code><span class="c"># Once: sign up at ngrok.com and add your authtoken</span>
+ngrok config add-authtoken &lt;your-token&gt;
+
+<span class="c"># Expose port 3000; register https://&lt;your-dev-domain&gt;/webhook with the provider</span>
+ngrok http 3000</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="s-p-cf" aria-labelledby="s-t-cf"><p class="tab-title">Cloudflare Quick Tunnel</p><div class="code"><div class="code-head"><span>Terminal</span></div><pre><code><span class="c"># No account needed. Prints https://&lt;random-words&gt;.trycloudflare.com</span>
+cloudflared tunnel --url http://localhost:3000
+
+<span class="c"># Register https://&lt;random-words&gt;.trycloudflare.com/webhook with the provider.</span>
+<span class="c"># The URL changes every time you restart cloudflared.</span></code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="s-p-replay" aria-labelledby="s-t-replay"><p class="tab-title">Capture &amp; replay</p><div class="code"><div class="code-head"><span>Terminal</span></div><pre><code><span class="c"># 1. Open whatiswebhook.com/webhook-tester.html and copy your URL</span>
+<span class="c"># 2. Register it with the provider and trigger an event</span>
+<span class="c"># 3. In the tester, open "Replay locally" and run the command it shows:</span>
+printf '%s' '{"id":"evt_1","type":"payment_intent.succeeded"}' | \
+curl -X POST 'http://localhost:3000/webhook' \
+  -H 'Content-Type: application/json' \
+  -H 'Stripe-Signature: t=…,v1=…' \
+  --data-binary @-</code></pre></div></div>
+    </div>
+
+    <h3 style="margin-top:44px">The handler, done right</h3>
+    <p>Whichever way the event arrives, the handler is the same. Verify the signature over the <em>raw</em> body, answer fast, then do the work. Here with Stripe's own libraries:</p>
+    <div class="tabs" data-tabs>
+      <div class="tab-list" role="tablist" aria-label="Language">
+        <button class="tab" role="tab" type="button" id="h-t-node" aria-controls="h-p-node">Node · Express</button>
+        <button class="tab" role="tab" type="button" id="h-t-py" aria-controls="h-p-py">Python · Flask</button>
+      </div>
+      <div class="tab-panel" role="tabpanel" id="h-p-node" aria-labelledby="h-t-node"><p class="tab-title">Node · Express</p><div class="code"><div class="code-head"><span>server.js</span></div><pre><code>import express from "express";
+import Stripe from "stripe";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const app = express();
+
+<span class="c">// The raw body on this route only: the signature covers the exact bytes.</span>
+app.post("/webhook", express.raw({ type: "application/json" }), (req, res) =&gt; {
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body, req.headers["stripe-signature"], process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    return res.status(400).send(`Bad signature: ${err.message}`);
+  }
+  res.sendStatus(200);      <span class="c">// answer first…</span>
+  handle(event);            <span class="c">// …then work, and skip event.id values you've seen</span>
+});
+
+app.use(express.json());    <span class="c">// JSON parsing for every other route, after the webhook</span>
+app.listen(3000);</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="h-p-py" aria-labelledby="h-t-py"><p class="tab-title">Python · Flask</p><div class="code"><div class="code-head"><span>app.py</span></div><pre><code>import os
+import stripe
+from flask import Flask, request
+
+app = Flask(__name__)
+
+@app.post("/webhook")
+def webhook():
+    <span class="c"># get_data() is the raw body; request.json would be too late</span>
+    payload = request.get_data()
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, request.headers.get("Stripe-Signature"),
+            os.environ["STRIPE_WEBHOOK_SECRET"])
+    except (ValueError, stripe.error.SignatureVerificationError):
+        return "Bad signature", 400
+    queue_for_later(event)  <span class="c"># keep the response fast</span>
+    return "", 200
+
+app.run(port=3000)</code></pre></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRAPS ============ -->
+<section class="section section-rule" id="traps" aria-labelledby="tr-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 05</span> The traps</p>
+      <h2 id="tr-h">What goes wrong only on your laptop</h2>
+    </div>
+
+    <article class="fix" id="localhost-url">
+      <div class="fix-head"><span class="n">01</span><h3>You registered <code>http://localhost:3000</code></h3></div>
+      <p class="symptom">The provider's delivery log: connection refused · timed out · invalid URL</p>
+      <p>The provider resolves <code>localhost</code> on <em>its</em> server, so it calls itself. Some providers reject such URLs outright. Register the tunnel's public URL, or use a CLI that needs no URL. Why localhost works this way: <a href="https://whatislocalhost.com/" rel="noopener">whatislocalhost.com</a>.</p>
+    </article>
+
+    <article class="fix" id="raw-body">
+      <div class="fix-head"><span class="n">02</span><h3>The signature fails, but only here</h3></div>
+      <p class="symptom">No signatures found matching the expected signature for payload · 401 · 400 Bad signature</p>
+      <p>Three usual causes, in order of likelihood:</p>
+      <ol>
+        <li><strong>The body was parsed before you checked it.</strong> Middleware like <code>express.json()</code> turns the bytes into an object; writing it back out doesn't reliably give the same bytes. Give the webhook route the raw body.</li>
+        <li><strong>The wrong secret.</strong> Events forwarded by <code>stripe listen</code> are signed with the secret it prints, not the dashboard endpoint's. Sandbox and live secrets differ too.</li>
+        <li><strong>A relay re-encoded the body.</strong> See smee.io above. Capture the same event in the <a href="/webhook-tester.html">tester</a> and check the signature there: if it passes there and fails in your app, the bytes changed on the way.</li>
+      </ol>
+    </article>
+
+    <article class="fix" id="breakpoints">
+      <div class="fix-head"><span class="n">03</span><h3>Every event arrives twice (or five times)</h3></div>
+      <p class="symptom">The same event ID in your logs, again and again, while you debug</p>
+      <p>A breakpoint holds the request open, and the provider gives up after its time limit: 3 seconds for Slack, 5 for Shopify, 10 for GitHub. It marks the delivery failed and, except for GitHub, sends it again. Answer <code>200</code> before you do any slow work, and record which event IDs you've handled so a retry does nothing.</p>
+    </article>
+
+    <article class="fix" id="new-url">
+      <div class="fix-head"><span class="n">04</span><h3>It worked yesterday</h3></div>
+      <p class="symptom">Deliveries fail with 404 or DNS errors after a restart</p>
+      <p>Your tunnel's URL changed. Cloudflare Quick Tunnels pick a new hostname every run, and so do tunnels on plans without a fixed domain. Re-register the new URL, use a tunnel with a stable domain, or <a href="/deploy-webhook-receiver.html">deploy the receiver</a> so the URL stops depending on your laptop.</p>
+    </article>
+
+    <article class="fix" id="redirects">
+      <div class="fix-head"><span class="n">05</span><h3>Your app redirects the webhook</h3></div>
+      <p class="symptom">301 · 302 · 308 in the delivery log</p>
+      <p>A redirect from <code>http</code> to <code>https</code>, or from <code>/webhook</code> to <code>/webhook/</code>, is a failure to the provider: Stripe counts redirects as failed deliveries. Register the exact final URL.</p>
+    </article>
+
+    <article class="fix" id="csrf">
+      <div class="fix-head"><span class="n">06</span><h3>The framework rejects the POST</h3></div>
+      <p class="symptom">403 Forbidden · CSRF verification failed · InvalidAuthenticityToken</p>
+      <p>Rails, Django, Laravel and others protect POST routes with CSRF tokens that a provider can't have. Exempt the webhook route, and rely on the signature check instead.</p>
+    </article>
+
+    <article class="fix" id="public">
+      <div class="fix-head"><span class="n">07</span><h3>Forgetting the tunnel is public</h3></div>
+      <p class="symptom">Requests in your logs that no provider sent</p>
+      <p>Anyone who finds the URL can call your laptop. Verify signatures in development too, don't serve admin pages on the same port, and stop the tunnel when you're done.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ============ GO LIVE ============ -->
+<section class="section section-rule" id="go-live" aria-labelledby="lp-h">
+  <div class="wrap">
+    <div class="launchpad reveal" data-launchpad data-tpl="Build me a webhook receiver for {idea}. It should verify the provider's signature over the raw request body, reject requests older than five minutes, answer 200 quickly and do the work after, and ignore duplicate event IDs. Add a Dockerfile, deploy it to cloudish.ai using the instructions at https://cloudish.ai/skill.md, and send me the live URL to paste into the provider. If you can't run commands yourself, give me the exact steps to run in my terminal.">
+      <div class="lp-head">
+        <div>
+          <p class="eyebrow"><span class="idx">§ 06</span> When to stop tunneling</p>
+          <h2 id="lp-h">A tunnel lives as long as your laptop is awake.<br>Give your webhook a real home.</h2>
+        </div>
+        <span class="badge">One sentence · no dashboard</span>
+      </div>
+      <div class="lp-grid">
+        <div class="lp-card">
+          <span class="lp-step"><i>A</i> Your handler works locally?</span>
+          <h3>Ask your coding agent</h3>
+          <p>Open a terminal in your project folder and paste one of these. The agent packages your code, deploys it, and hands you back a permanent HTTPS URL to register once.</p>
+          <div class="cmd"><span class="p">$</span><code>claude "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <div class="cmd"><span class="p">$</span><code>codex "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <p class="fineprint">Keep the signing secret out of your code: the agent can store it as an encrypted secret on the server.</p>
+        </div>
+        <div class="lp-card">
+          <span class="lp-step"><i>B</i> Starting from zero?</span>
+          <h3>Have one built and deployed</h3>
+          <label class="visually-hidden" for="idea-local">Which webhooks should it receive?</label>
+          <input class="field" id="idea-local" data-idea type="text" placeholder="Stripe payment events that email me each new sale" autocomplete="off">
+          <div class="chips" style="margin:10px 0 4px">
+            <button type="button" class="chip" data-idea-chip="GitHub push events that post a summary to a Discord channel" aria-pressed="false">GitHub → Discord</button>
+            <button type="button" class="chip" data-idea-chip="Shopify orders that append a row to a Google Sheet" aria-pressed="false">Shopify → Sheet</button>
+            <button type="button" class="chip" data-idea-chip="Stripe subscription events that update a small Postgres table" aria-pressed="false">Stripe → database</button>
+          </div>
+          <div class="ai-buttons">
+            <a class="ai-btn" data-ai="chatgpt" href="https://chatgpt.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true">G</span><span>ChatGPT<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="claude" href="https://claude.ai/new" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#c2410c">C</span><span>Claude<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="grok" href="https://grok.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#334155">X</span><span>Grok<small>Open with prompt</small></span></a>
+          </div>
+          <p class="fineprint">Chat assistants deploy for you when they can run code with internet access; otherwise they'll give you the exact commands.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="section section-rule" id="faq" aria-labelledby="faq-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 07</span> FAQ</p>
+      <h2 id="faq-h">Frequently asked questions</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>Can Stripe send webhooks to localhost?</summary>
+        <div class="faq-a"><p>Not directly. Stripe sends webhooks from its servers on the internet, and localhost only exists on your own computer. Use the Stripe CLI (<code>stripe listen --forward-to localhost:3000/webhook</code>), which receives events over an outbound connection and forwards them to your machine.</p></div>
+      </details>
+      <details>
+        <summary>Do I need ngrok to test webhooks?</summary>
+        <div class="faq-a"><p>No. If the provider has a CLI that forwards events (Stripe, GitHub), use that. For anything else, a Cloudflare Quick Tunnel needs no account, and you can capture a real request with a <a href="/webhook-tester.html">webhook tester</a> and replay it to localhost with curl.</p></div>
+      </details>
+      <details>
+        <summary>Why does webhook signature verification fail locally?</summary>
+        <div class="faq-a"><p>Usually one of three things: your framework parsed the JSON before you verified it, so the bytes changed; you're using the dashboard's signing secret while the events come through a CLI that signs with its own; or a relay re-encoded the body on the way. Verify against the raw body with the secret of the path the event actually took.</p></div>
+      </details>
+      <details>
+        <summary>Does GitHub retry failed webhook deliveries?</summary>
+        <div class="faq-a"><p>No. GitHub does not automatically redeliver failed deliveries; you redeliver them from the webhook's Recent Deliveries tab or the REST API. Stripe, Shopify and Slack do retry, so a slow or failing local handler gets the same event again.</p></div>
+      </details>
+      <details>
+        <summary>Why do I get duplicate webhooks when debugging?</summary>
+        <div class="faq-a"><p>A breakpoint holds the request open past the provider's time limit (3 seconds for Slack, 5 for Shopify, 10 for GitHub), so the provider marks the delivery failed and retries it. Answer 2xx first and do the work afterwards, and ignore event IDs you've already handled.</p></div>
+      </details>
+      <details>
+        <summary>Is it safe to expose localhost with a tunnel?</summary>
+        <div class="faq-a"><p>A tunnel URL is public: anyone who finds it can send requests to your laptop. Verify signatures even in development, don't expose admin routes on the same port, and close the tunnel when you're done.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="section-tight" aria-label="Next chapter">
+  <div class="wrap">
+    <a class="next-chapter reveal" href="/webhook-not-working.html">
+      <span><small>Next · Chapter 03</small><strong>Webhook not working?</strong><span class="sub">Read a delivery log like a detective: every status, timeout and retry, and what it means.</span></span>
+      <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg><span class="logo-text">whatis<b>webhook</b></span></a>
+        <p>A visual field guide to webhooks: what they are, how to test them, why they fail, and where they should live.</p>
+      </div>
+      <div class="footer-col"><h2>Chapters</h2><ul>
+        <li><a href="/">01 · What is a webhook?</a></li>
+        <li><a href="/test-webhook-locally.html">02 · Test a webhook locally</a></li>
+        <li><a href="/webhook-not-working.html">03 · Webhook not working</a></li>
+        <li><a href="/verify-webhook-signatures.html">04 · Verify signatures</a></li>
+        <li><a href="/deploy-webhook-receiver.html">05 · Deploy a receiver</a></li>
+        <li><a href="/webhook-tester.html">Tool · Webhook tester</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>Primary sources</h2><ul>
+        <li><a href="https://docs.stripe.com/webhooks" rel="noopener">Stripe · webhooks</a></li>
+        <li><a href="https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/using-the-github-cli-to-forward-webhooks-for-testing" rel="noopener">GitHub · CLI forwarding</a></li>
+        <li><a href="https://docs.github.com/en/webhooks/using-webhooks/handling-failed-webhook-deliveries" rel="noopener">GitHub · failed deliveries</a></li>
+        <li><a href="https://shopify.dev/docs/apps/build/webhooks/subscribe/https" rel="noopener">Shopify · HTTPS webhooks</a></li>
+        <li><a href="https://docs.slack.dev/apis/events-api/" rel="noopener">Slack · Events API</a></li>
+        <li><a href="https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/" rel="noopener">Cloudflare · Quick Tunnels</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>For machines</h2><ul>
+        <li><a href="/llms.txt">llms.txt</a></li>
+        <li><a href="/sitemap.xml">sitemap.xml</a></li>
+        <li><a href="https://cloudish.ai/skill.md" rel="noopener">Cloudish deploy skill</a></li>
+      </ul></div>
+    </div>
+    <div class="titleblock">
+      <div><span>Project</span><strong>What is a webhook? A field guide</strong></div>
+      <div><span>Sheet</span><strong>02 of 05</strong></div>
+      <div><span>Drawing</span><strong>Test locally</strong></div>
+      <div><span>Rev</span><strong>1.0.0</strong></div>
+      <div><span>Scale</span><strong>Internet : localhost</strong></div>
+      <div><span>Deployed on</span><strong><a href="https://cloudish.ai/" rel="noopener">Cloudish.ai</a> — not a laptop</strong></div>
+    </div>
+    <div class="footer-legal"><span>© 2026 whatiswebhook.com</span><span>Drawn in blueprint blue. Every request answered from a data center.</span></div>
+  </div>
+</footer>
+<script src="/script.js?v=1.0.0" defer></script>
+</body>
+</html>
