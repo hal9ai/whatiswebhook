@@ -1,1 +1,114 @@
-<!doctype html><title>Not found</title><p>Not found.</p>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404: This webhook went nowhere · whatiswebhook.com</title>
+<meta name="description" content="This page doesn't exist. The field guide to webhooks starts at chapter 01.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f5f8fd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#061633" media="(prefers-color-scheme: dark)">
+<script src="/theme.js"></script>
+<link rel="preload" href="/fonts/space-grotesk-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-sans-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=1.0.0">
+<link rel="stylesheet" href="/webhook.css?v=1.0.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="whatiswebhook.com">
+<meta property="og:title" content="What is a webhook? An app, calling you back.">
+<meta property="og:description" content="A visual field guide: how webhooks work, what one looks like on the wire, webhooks vs polling an API, and where the URL has to live.">
+<meta property="og:url" content="https://whatiswebhook.com/">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <a class="logo" href="/" aria-label="whatiswebhook.com home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><g class="logo-loop"><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg>
+      <span class="logo-text">whatis<b>webhook</b></span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Chapters">
+      <a href="/"><span class="n">01</span>Webhooks</a>
+      <a href="/test-webhook-locally.html"><span class="n">02</span>Test locally</a>
+      <a href="/webhook-not-working.html"><span class="n">03</span>Troubleshoot</a>
+      <a href="/verify-webhook-signatures.html"><span class="n">04</span>Signatures</a>
+      <a href="/deploy-webhook-receiver.html"><span class="n">05</span>Deploy</a>
+    </nav>
+    <div class="masthead-actions">
+      <button class="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to dark blueprint theme"><span class="knob" aria-hidden="true"></span><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7L7 17M17 7l1.7-1.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/webhook-tester.html">Webhook tester</a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="bars" aria-hidden="true"></span>Menu</button>
+    </div>
+  </div>
+  <div class="progress" aria-hidden="true"><span></span></div>
+</header>
+
+<main id="main" class="notfound">
+  <div class="wrap center">
+    <p class="kicker"><span class="tag">HTTP 404</span> Not found on this server</p>
+    <svg class="dg anim nf-loop" viewBox="0 0 520 220" role="img" aria-label="A delivery circles forever, retried and never answered.">
+      <text class="nf-404 mid" x="260" y="150">404</text>
+      <path id="nf-p" class="ln-sig flow" d="M70 190 C 20 190 20 120 70 110 C 150 96 370 96 450 110 C 500 120 500 190 450 190 Z"/>
+      <g class="pkt"><circle class="pkt-halo" r="9"/><circle class="pkt-core" r="4.5"/><animateMotion dur="5s" repeatCount="indefinite"><mpath href="#nf-p"/></animateMotion></g>
+      <text class="lbl mid" x="260" y="214">POST → 404 → RETRY → 404 → RETRY → …</text>
+    </svg>
+    <h1 class="nf-title">This page went where failed webhooks go.</h1>
+    <p class="lede" style="max-width:34em;margin-inline:auto">There's nothing at this address. If a provider is sending webhooks here, check the URL you registered.</p>
+    <div class="hero-ctas" style="justify-content:center">
+      <a class="btn btn-primary" href="/">Start at chapter 01 <span class="arr" aria-hidden="true">→</span></a>
+      <a class="btn" href="/webhook-not-working.html">Troubleshoot a webhook</a>
+    </div>
+    <ul class="chips" style="justify-content:center;list-style:none;padding:0;margin-top:28px" aria-label="Chapters">
+      <li><a class="chip" href="/test-webhook-locally.html"><span class="k">02</span> Test locally</a></li>
+      <li><a class="chip" href="/verify-webhook-signatures.html"><span class="k">04</span> Signatures</a></li>
+      <li><a class="chip" href="/deploy-webhook-receiver.html"><span class="k">05</span> Deploy</a></li>
+      <li><a class="chip" href="/webhook-tester.html"><span class="k">Tool</span> Tester</a></li>
+    </ul>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg><span class="logo-text">whatis<b>webhook</b></span></a>
+        <p>A visual field guide to webhooks: what they are, how to test them, why they fail, and where they should live.</p>
+      </div>
+      <div class="footer-col"><h2>Chapters</h2><ul>
+        <li><a href="/">01 · What is a webhook?</a></li>
+        <li><a href="/test-webhook-locally.html">02 · Test a webhook locally</a></li>
+        <li><a href="/webhook-not-working.html">03 · Webhook not working</a></li>
+        <li><a href="/verify-webhook-signatures.html">04 · Verify signatures</a></li>
+        <li><a href="/deploy-webhook-receiver.html">05 · Deploy a receiver</a></li>
+        <li><a href="/webhook-tester.html">Tool · Webhook tester</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>Primary sources</h2><ul>
+        <li><a href="https://docs.stripe.com/webhooks" rel="noopener">Stripe · webhooks</a></li>
+        <li><a href="https://docs.github.com/en/webhooks/about-webhooks" rel="noopener">GitHub · about webhooks</a></li>
+        <li><a href="https://shopify.dev/docs/apps/build/webhooks" rel="noopener">Shopify · webhooks</a></li>
+        <li><a href="https://docs.slack.dev/apis/events-api/" rel="noopener">Slack · Events API</a></li>
+        <li><a href="https://www.standardwebhooks.com/" rel="noopener">Standard Webhooks</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>For machines</h2><ul>
+        <li><a href="/llms.txt">llms.txt</a></li>
+        <li><a href="/sitemap.xml">sitemap.xml</a></li>
+        <li><a href="https://cloudish.ai/skill.md" rel="noopener">Cloudish deploy skill</a></li>
+      </ul></div>
+    </div>
+    <div class="titleblock">
+      <div><span>Project</span><strong>What is a webhook? A field guide</strong></div>
+      <div><span>Sheet</span><strong>404</strong></div>
+      <div><span>Drawing</span><strong>Not found</strong></div>
+      <div><span>Rev</span><strong>1.0.0</strong></div>
+      <div><span>Scale</span><strong>1 event : 1 request</strong></div>
+      <div><span>Deployed on</span><strong><a href="https://cloudish.ai/" rel="noopener">Cloudish.ai</a> — not a laptop</strong></div>
+    </div>
+    <div class="footer-legal"><span>© 2026 whatiswebhook.com</span><span>Drawn in blueprint blue. Every request answered from a data center.</span></div>
+  </div>
+</footer>
+<script src="/script.js?v=1.0.0" defer></script>
+</body>
+</html>

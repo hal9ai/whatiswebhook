@@ -435,7 +435,7 @@ app.run(port=3000)</code></pre></div></div>
     <article class="fix" id="breakpoints">
       <div class="fix-head"><span class="n">03</span><h3>Every event arrives twice (or five times)</h3></div>
       <p class="symptom">The same event ID in your logs, again and again, while you debug</p>
-      <p>A breakpoint holds the request open, and the provider gives up after its time limit: 3 seconds for Slack, 5 for Shopify, 10 for GitHub. It marks the delivery failed and, except for GitHub, sends it again. Answer <code>200</code> before you do any slow work, and record which event IDs you've handled so a retry does nothing.</p>
+      <p>A breakpoint holds the request open, and the provider gives up after its time limit: 3 seconds for Slack, 5 for Shopify, 10 for GitHub. It marks the delivery failed and, except for GitHub, sends it again. Answer <code>200</code> before you do any slow work, and record which event IDs you've handled so a retry does nothing. <a href="/webhook-not-working.html#duplicates">Dedupe keys for each provider →</a></p>
     </article>
 
     <article class="fix" id="new-url">
@@ -447,13 +447,13 @@ app.run(port=3000)</code></pre></div></div>
     <article class="fix" id="redirects">
       <div class="fix-head"><span class="n">05</span><h3>Your app redirects the webhook</h3></div>
       <p class="symptom">301 · 302 · 308 in the delivery log</p>
-      <p>A redirect from <code>http</code> to <code>https</code>, or from <code>/webhook</code> to <code>/webhook/</code>, is a failure to the provider: Stripe counts redirects as failed deliveries. Register the exact final URL.</p>
+      <p>A redirect from <code>http</code> to <code>https</code>, or from <code>/webhook</code> to <code>/webhook/</code>, is a failure to the provider: Stripe counts redirects as failed deliveries. Register the exact final URL. <a href="/webhook-not-working.html#redirects">More on redirects →</a></p>
     </article>
 
     <article class="fix" id="csrf">
       <div class="fix-head"><span class="n">06</span><h3>The framework rejects the POST</h3></div>
       <p class="symptom">403 Forbidden · CSRF verification failed · InvalidAuthenticityToken</p>
-      <p>Rails, Django, Laravel and others protect POST routes with CSRF tokens that a provider can't have. Exempt the webhook route, and rely on the signature check instead.</p>
+      <p>Rails, Django, Laravel and others protect POST routes with CSRF tokens that a provider can't have. Exempt the webhook route, and rely on the signature check instead. <a href="/webhook-not-working.html#blocked">CSRF, logins and firewalls →</a></p>
     </article>
 
     <article class="fix" id="public">

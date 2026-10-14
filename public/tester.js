@@ -350,8 +350,10 @@
     const out = $("[data-sig-out]");
     out.textContent = "";
     const e = entries.find((x) => x.id === selected);
-    const secret = $("[data-sig-secret]").value.trim();
+    const raw = $("[data-sig-secret]").value;
+    const secret = raw.trim();
     if (!e) return;
+    if (secret && raw !== secret) out.append(el("p", "fineprint", "Spaces or line breaks around the secret were ignored. If your app reads the secret with them, its check will fail."));
     if (!secret) { out.append(el("p", "wt-sig-res is-bad", "Paste the signing secret first.")); return; }
     if (!(window.crypto && crypto.subtle)) { out.append(el("p", "wt-sig-res is-bad", "This browser has no Web Crypto API (it needs HTTPS).")); return; }
     if (e.truncated) out.append(el("p", "wt-sig-res is-bad", "This body was cut at 256 KiB, so its signature can't match."));

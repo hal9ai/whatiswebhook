@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /api/
+Disallow: /in/
+Allow: /
+
+Sitemap: https://whatiswebhook.com/sitemap.xml

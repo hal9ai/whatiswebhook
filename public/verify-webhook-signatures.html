@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify Webhook Signatures: HMAC for Stripe, GitHub, Slack & Shopify, with Code</title>
+<meta name="description" content="How webhook HMAC signatures work, with a live playground and tested Node and Python code for Stripe, GitHub (X-Hub-Signature-256), Slack and Shopify, plus the reasons verification fails.">
+<link rel="canonical" href="https://whatiswebhook.com/verify-webhook-signatures.html">
+<meta name="theme-color" content="#f5f8fd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#061633" media="(prefers-color-scheme: dark)">
+<script src="/theme.js"></script>
+<link rel="preload" href="/fonts/space-grotesk-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-sans-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=1.0.0">
+<link rel="stylesheet" href="/webhook.css?v=1.0.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="whatiswebhook.com">
+<meta property="og:title" content="How to verify webhook signatures">
+<meta property="og:description" content="HMAC-SHA256 in plain words, a live playground, and tested code for Stripe, GitHub, Slack, Shopify and Standard Webhooks.">
+<meta property="og:url" content="https://whatiswebhook.com/verify-webhook-signatures.html">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+/* Chapter 04: the signature playground */
+.pg [hidden] { display: none !important; }
+html:not(.js) .pg { display: none; }
+.pg-schemes { margin-bottom: 16px; }
+.pg-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .pg-grid { grid-template-columns: 1fr; } }
+.pg-panel { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); padding: 18px; box-shadow: var(--shadow-sm); min-width: 0; }
+.pg-field { display: grid; gap: 6px; margin-bottom: 12px; min-width: 0; }
+.pg-field label, .pg-lab { font: 500 .68rem/1.4 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0; }
+.pg-field .field { min-height: 40px; padding: 8px 12px; font: 400 .9rem/1.45 var(--font-mono); border-radius: 9px; }
+.pg textarea.field { resize: vertical; min-height: 128px; }
+.pg-pair { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.pg-pair > .pg-field { flex: 1 1 210px; }
+.pg-inline { display: flex; gap: 8px; }
+.pg-inline .field { flex: 1; min-width: 0; }
+.pg-inline .btn { min-height: 40px; }
+.pg-age { font-size: .84rem; margin: -4px 0 12px; color: var(--ink-2); }
+.pg-age[data-state="ok"] { color: var(--ok); }
+.pg-age[data-state="bad"] { color: var(--err); }
+.pg .chips { margin: 8px 0 14px; }
+.pg-actions .btn { white-space: normal; }
+.pg-note { font-size: .86rem; color: var(--ink-2); min-height: 1.4em; margin: 12px 0 0; }
+.pg-step { margin-bottom: 14px; }
+.pg-lab b { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 6px; border-radius: 5px; background: var(--fill); color: #fff; font-size: .64rem; letter-spacing: 0; }
+.pg-lab span { color: var(--ink-3); letter-spacing: .04em; text-transform: none; }
+.pg-pre { margin: 6px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--code-bg); color: var(--code-ink); border: 1px solid var(--code-border); font: 400 .82rem/1.6 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }
+.pg-part-pre { color: var(--code-accent); }
+.pg-ws, .pg-hk { color: var(--code-muted); }
+.pg-diff { background: rgba(255, 114, 114, .28); color: #ffd2d2; border-radius: 2px; }
+.pg-key { margin: 6px 0 0; font: 400 .86rem/1.5 var(--font-mono); color: var(--ink); }
+.pg-key.is-bad { color: var(--err); }
+.pg-verdict { margin: 4px 0 12px; padding: 10px 14px; border-radius: 10px; font-weight: 600; }
+.pg-verdict.is-ok { background: var(--ok-soft); color: var(--ok); }
+.pg-verdict.is-bad { background: var(--err-soft); color: var(--err); }
+.pg-example { margin: 0 0 12px; font-size: .86rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.pg-example:empty { display: none; }
+.pg-example[data-state="ok"] { color: var(--ok); font-weight: 600; }
+.pg .cmd { margin-top: 6px; }
+.pg-legend { margin: 10px 0 0; font-size: .82rem; color: var(--ink-3); }
+.json-demo td:nth-of-type(1) code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+.schemes td code { white-space: nowrap; }
+.table-wrap.schemes table { min-width: 940px; }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "@id": "https://whatiswebhook.com/verify-webhook-signatures.html#article",
+      "headline": "How to verify webhook signatures",
+      "description": "How HMAC-SHA256 webhook signatures work, why they must be checked over the raw bytes, and tested Node and Python code for Stripe, GitHub, Slack, Shopify and Standard Webhooks.",
+      "url": "https://whatiswebhook.com/verify-webhook-signatures.html",
+      "datePublished": "2026-10-14",
+      "dateModified": "2026-10-14",
+      "inLanguage": "en",
+      "isPartOf": { "@type": "WebSite", "name": "whatiswebhook.com", "url": "https://whatiswebhook.com/" },
+      "about": [
+        { "@type": "Thing", "name": "Webhook" },
+        { "@type": "Thing", "name": "HMAC" },
+        { "@type": "Thing", "name": "Digital signature" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://whatiswebhook.com/verify-webhook-signatures.html#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How do I verify a webhook signature?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Read the raw request body as bytes and build the provider's signed content from it (for Stripe: the timestamp, a dot, then the body). Compute HMAC-SHA256 over it with your signing secret, encode the result the way the provider does (hex or base64), and compare it with the header using a constant-time function. If the scheme has a timestamp, also reject requests more than about five minutes old." }
+        },
+        {
+          "@type": "Question",
+          "name": "Why does Stripe say \"No signatures found matching the expected signature for payload\"?",
+          "acceptedAnswer": { "@type": "Answer", "text": "One of the three inputs is wrong. Usually the body was parsed or changed before you passed it in, so pass the raw Buffer or bytes. Or the whsec_ secret is the wrong one: stripe listen, each Dashboard endpoint, and test versus live mode each have their own." }
+        },
+        {
+          "@type": "Question",
+          "name": "What is X-Hub-Signature-256?",
+          "acceptedAnswer": { "@type": "Answer", "text": "The header GitHub adds to a webhook delivery when the webhook has a secret. Its value is sha256= followed by the HMAC-SHA256 hex digest of the request body, keyed with that secret. The older X-Hub-Signature header uses SHA-1 and is only included for legacy purposes." }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I verify a Shopify webhook HMAC?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Compute HMAC-SHA256 of the raw request body with your app's client secret, base64-encode it, and compare it with the X-Shopify-Hmac-Sha256 header in constant time. After you rotate the client secret, it can take up to an hour before Shopify signs with the new one." }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I verify Slack requests with the signing secret?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Join v0, the X-Slack-Request-Timestamp value and the raw body with colons. Compute HMAC-SHA256 over that with your app's signing secret (in the app admin panel under Basic Info), prefix the hex digest with v0=, and compare it with X-Slack-Signature using an HMAC compare function. Reject timestamps more than five minutes from your server's time." }
+        },
+        {
+          "@type": "Question",
+          "name": "If webhooks are signed, do I still need HTTPS?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. A signature proves who sent the body and that it wasn't changed, but it doesn't hide it. Without TLS, anyone on the network path can read the payload and replay the captured request: within the time window for schemes with a timestamp, and at any time for schemes without one. Stripe requires HTTPS for live-mode endpoints." }
+        },
+        {
+          "@type": "Question",
+          "name": "Why compare signatures in constant time?",
+          "acceptedAnswer": { "@type": "Answer", "text": "A normal string comparison stops at the first character that differs, so the time it takes leaks how much of a guess was right. Over many requests, an attacker could in principle build a valid signature one character at a time. Use crypto.timingSafeEqual in Node or hmac.compare_digest in Python." }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--stroke-2);stroke-width:1"/></pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--stroke)"/></marker>
+    <marker id="arr-sig" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--signal)"/></marker>
+    <marker id="arr-ok" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--ok)"/></marker>
+  </defs>
+</svg>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <a class="logo" href="/" aria-label="whatiswebhook.com home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><g class="logo-loop"><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg>
+      <span class="logo-text">whatis<b>webhook</b></span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Chapters">
+      <a href="/"><span class="n">01</span>Webhooks</a>
+      <a href="/test-webhook-locally.html"><span class="n">02</span>Test locally</a>
+      <a href="/webhook-not-working.html"><span class="n">03</span>Troubleshoot</a>
+      <a href="/verify-webhook-signatures.html" aria-current="page"><span class="n">04</span>Signatures</a>
+      <a href="/deploy-webhook-receiver.html"><span class="n">05</span>Deploy</a>
+    </nav>
+    <div class="masthead-actions">
+      <button class="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to dark blueprint theme"><span class="knob" aria-hidden="true"></span><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7L7 17M17 7l1.7-1.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/webhook-tester.html">Webhook tester</a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="bars" aria-hidden="true"></span>Menu</button>
+    </div>
+  </div>
+  <div class="progress" aria-hidden="true"><span></span></div>
+</header>
+
+<main id="main">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="kicker"><span class="tag">CH. 04</span> A field guide · trust, but verify</p>
+      <h1>How to verify <span class="hl">webhook</span> signatures</h1>
+      <p class="lede">Your webhook URL is public. Anyone can POST to it. The signature header is how you tell a real event from a forged one: the sender mixes a shared secret with the exact bytes it sent, and you do the same math on the bytes you got. Here's how that works for Stripe, GitHub, Slack, Shopify and Standard Webhooks, with code that's been tested, and a playground to break it in.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#playground">Try the playground <span class="arr" aria-hidden="true">↓</span></a>
+        <a class="btn" href="#code">Jump to the code</a>
+      </div>
+      <dl class="readouts">
+        <div><dt>Algorithm, all five</dt><dd>HMAC-SHA256</dd></div>
+        <div><dt>Usual replay window</dt><dd>5 <small>min</small></dd></div>
+        <div><dt>Changes allowed</dt><dd>0 <small>bytes</small></dd></div>
+      </dl>
+    </div>
+
+    <figure class="fig hero-fig corners" data-crosshair>
+      <div class="fig-bar"><span><b>Fig. 01</b> — the same math on both ends</span><span class="live">Live</span></div>
+      <svg class="dg anim" viewBox="0 0 600 450" role="img" aria-labelledby="f1t f1d">
+        <title id="f1t">Sender and receiver compute the same HMAC over the same bytes</title>
+        <desc id="f1d">Stripe computes HMAC-SHA256 with the endpoint secret over the timestamp, a dot and the body, and sends the result in the Stripe-Signature header. The receiver builds the same string from the raw bytes it received and computes the HMAC with the same secret. The two values match, so it answers 200. Below, a relay added one space to the body. The receiver's result is completely different, and it answers 400.</desc>
+        <!-- packet path runs under the request card -->
+        <path id="sig-req" d="M192 102 H408" fill="none"/>
+        <g class="pkt"><circle class="pkt-halo" r="10"/><circle class="pkt-core" r="4.6"/>
+          <animateMotion dur="3.6s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.7;1" calcMode="linear"><mpath href="#sig-req"/></animateMotion>
+          <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;.7;.72;1" dur="3.6s" repeatCount="indefinite"/>
+        </g>
+
+        <!-- sender -->
+        <rect class="bg" x="24" y="40" width="168" height="124" rx="8"/><rect class="ln" x="24" y="40" width="168" height="124" rx="8"/>
+        <path class="ln-3" d="M24 66 H192"/>
+        <text class="tx-3" x="36" y="57">SENDER · STRIPE</text>
+        <text class="tx-2" x="36" y="88">key  whsec_example</text>
+        <text class="tx-2" x="36" y="106">msg  t + "." + body</text>
+        <text class="tx" x="36" y="132">HMAC-SHA256</text>
+        <text class="tx-2" x="36" y="150">→ v1=c100576e…</text>
+
+        <!-- request -->
+        <rect class="bg" x="216" y="40" width="168" height="124" rx="8"/><rect class="ln-2" x="216" y="40" width="168" height="124" rx="8"/>
+        <path class="ln-3" d="M216 66 H384"/>
+        <text class="tx-3" x="228" y="57">THE REQUEST · HTTPS</text>
+        <text class="tx-2" x="228" y="86">POST /webhook</text>
+        <text class="tx-2" x="228" y="104">Stripe-Signature:</text>
+        <text class="tx-2" x="236" y="120">t=1492774577,</text>
+        <text class="tx-2" x="236" y="136">v1=c100576e…</text>
+        <text class="tx-2" x="228" y="154">{"id":"evt_1",…}</text>
+
+        <!-- receiver -->
+        <rect class="bg-blue" x="408" y="40" width="168" height="124" rx="8"/><rect class="ln" x="408" y="40" width="168" height="124" rx="8"/>
+        <path class="ln-3" d="M408 66 H576"/>
+        <text class="tx-3" x="420" y="57">YOUR RECEIVER</text>
+        <text class="tx-2" x="420" y="88">same key,</text>
+        <text class="tx-2" x="420" y="106">same msg, built</text>
+        <text class="tx-2" x="420" y="122">from the raw bytes</text>
+        <text class="tx" x="420" y="148">HMAC-SHA256 → ?</text>
+
+        <path class="ln-sig flow" d="M192 102 H212" marker-end="url(#arr-sig)"/>
+        <path class="ln-sig flow" d="M384 102 H404" marker-end="url(#arr-sig)"/>
+
+        <!-- the check -->
+        <text class="lbl" x="24" y="194">THE CHECK, ON YOUR RECEIVER</text>
+        <rect class="bg" x="24" y="204" width="552" height="32" rx="6"/><rect class="ln-3" x="24" y="204" width="552" height="32" rx="6"/>
+        <text class="tx-3" x="36" y="224">HEADER SAYS</text>
+        <text class="tx" x="146" y="225">v1=c100576ed1091bd0a7ace3cb…</text>
+        <rect class="bg" x="24" y="244" width="552" height="32" rx="6"/><rect class="ln-ok" x="24" y="244" width="552" height="32" rx="6"/>
+        <text class="tx-3" x="36" y="264">YOU COMPUTE</text>
+        <text class="tx" x="146" y="265">v1=c100576ed1091bd0a7ace3cb…</text>
+        <text class="lbl-ok end" x="564" y="265">✓ MATCH → 200</text>
+
+        <path class="ln-3" d="M20 300 H580"/>
+
+        <!-- tampered -->
+        <text class="lbl-err" x="24" y="326">✕ A RELAY ADDED ONE SPACE ON THE WAY</text>
+        <rect class="bg" x="24" y="336" width="552" height="32" rx="6"/><rect class="ln-3" x="24" y="336" width="552" height="32" rx="6"/>
+        <text class="tx-3" x="36" y="356">BYTES NOW</text>
+        <text class="tx" x="146" y="357">{"id":<tspan class="f-sig">␣</tspan>"evt_1",…}</text>
+        <rect class="bg" x="24" y="376" width="552" height="32" rx="6"/><rect class="ln-err" x="24" y="376" width="552" height="32" rx="6"/>
+        <text class="tx-3" x="36" y="396">YOU COMPUTE</text>
+        <text class="tx" x="146" y="397">v1=8122a06034e54fbc2212b7…</text>
+        <text class="lbl-err end" x="564" y="397">✕ NO MATCH → 400</text>
+        <text class="tx-3" x="24" y="434">SAME SECRET · ONE BYTE CHANGED · A NEW SIGNATURE</text>
+      </svg>
+      <figcaption>Real values: secret <code>whsec_example</code>, timestamp <code>1492774577</code>, body <code>{"id":"evt_1","type":"payment_intent.succeeded"}</code>. One extra space after the first colon changes the signature completely, which is exactly what you want: there's no "close enough" in HMAC.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ QUICK ANSWER ============ -->
+<section class="section section-tight" id="quick-answer" aria-labelledby="qa-h">
+  <div class="wrap split split-wide">
+    <div class="reveal">
+      <p class="eyebrow"><span class="idx">§ 01</span> The short answer</p>
+      <h2 id="qa-h">Verifying a webhook, in one paragraph</h2>
+      <div class="answer">
+        <span class="answer-label">Quick answer</span>
+        <p>Take the request body <strong>as raw bytes, before any parsing</strong>. Build the string the provider signed (often a timestamp, a separator, then the body), compute <strong>HMAC-SHA256</strong> over it with your signing secret, and encode the result as the provider does: hex for Stripe, GitHub and Slack, base64 for Shopify and Standard Webhooks.</p>
+        <p>Compare it with the signature header using a <strong>constant-time</strong> function (<code>crypto.timingSafeEqual</code>, <code>hmac.compare_digest</code>), and reject timestamps more than about five minutes old. Only then parse the JSON. If it keeps failing, <a href="/webhook-tester.html">capture the request</a> and check it in the tester's Signature tab.</p>
+      </div>
+    </div>
+    <div class="reveal reveal-d1">
+      <p class="eyebrow"><span class="idx">Spec sheet</span> Key facts</p>
+      <dl class="facts">
+        <dt>Algorithm</dt><dd>HMAC-SHA256 for Stripe, GitHub, Slack, Shopify and Standard Webhooks (v1)</dd>
+        <dt>Signed over</dt><dd>The raw body, plus a timestamp for Stripe, Slack and Standard Webhooks</dd>
+        <dt>Encoding</dt><dd>Hex: Stripe, GitHub, Slack · Base64: Shopify, Standard Webhooks</dd>
+        <dt>Replay window</dt><dd>5 min: Stripe's libraries, Slack, Standard Webhooks' libraries</dd>
+        <dt>Compare with</dt><dd>crypto.timingSafeEqual (Node) · hmac.compare_digest (Python)</dd>
+        <dt>Rotation</dt><dd>Stripe: old secret kept up to 24 h, one v1 per secret · Standard Webhooks: space-separated list</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PLAYGROUND ============ -->
+<section class="section section-rule" id="playground" aria-labelledby="pg-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 02</span> Try it</p>
+      <h2 id="pg-h">The HMAC playground</h2>
+      <p>Pick a scheme. The sender signs the body below, and its header is frozen. Then change anything, the way a proxy, a framework or a wrong config would, and see what the receiver computes. It runs in your browser with the Web Crypto API; nothing you type is sent anywhere.</p>
+    </div>
+    <div class="pg" data-playground>
+      <div class="seg pg-schemes" role="group" aria-label="Signature scheme">
+        <button type="button" data-scheme="stripe" aria-pressed="true">Stripe<small>Stripe-Signature</small></button>
+        <button type="button" data-scheme="github" aria-pressed="false">GitHub<small>X-Hub-Signature-256</small></button>
+        <button type="button" data-scheme="slack" aria-pressed="false">Slack<small>X-Slack-Signature</small></button>
+        <button type="button" data-scheme="shopify" aria-pressed="false">Shopify<small>X-Shopify-Hmac-Sha256</small></button>
+        <button type="button" data-scheme="standard" aria-pressed="false">Standard Webhooks<small>webhook-signature</small></button>
+      </div>
+      <div class="pg-grid">
+        <div class="pg-panel">
+          <div class="pg-field"><label for="pg-secret">Signing secret</label><input class="field" id="pg-secret" type="text" data-pg-secret autocomplete="off" spellcheck="false" value="whsec_playground_3f9a1c7e"></div>
+          <div class="pg-pair">
+            <div class="pg-field" data-pg-ts-row><label for="pg-ts">Timestamp · Unix seconds</label><div class="pg-inline"><input class="field" id="pg-ts" type="text" inputmode="numeric" data-pg-ts autocomplete="off" spellcheck="false"><button class="btn btn-sm" type="button" data-pg-now>Now</button></div></div>
+            <div class="pg-field" data-pg-id-row hidden><label for="pg-id">webhook-id</label><input class="field" id="pg-id" type="text" data-pg-id autocomplete="off" spellcheck="false" value="msg_p5jXN8AQM9LWM0D4loKWxJek"></div>
+          </div>
+          <p class="pg-age" data-pg-age></p>
+          <div class="pg-field"><label for="pg-body">Body · the raw bytes on the wire</label><textarea class="field" id="pg-body" rows="5" data-pg-body spellcheck="false" autocomplete="off">{"id":"evt_1","type":"order.paid","amount":2000}</textarea></div>
+          <p class="pg-lab">Change it the way tools do</p>
+          <div class="chips">
+            <button type="button" class="chip" data-tamper="space">Add a space</button>
+            <button type="button" class="chip" data-tamper="newline">Add a final newline</button>
+            <button type="button" class="chip" data-tamper="reorder">Reorder the keys</button>
+            <button type="button" class="chip" data-tamper="pretty">Pretty-print</button>
+          </div>
+          <div class="btn-row pg-actions">
+            <button class="btn btn-sm" type="button" data-pg-reset>Undo my changes</button>
+            <button class="btn btn-sm" type="button" data-pg-sign>Sign this as the sender</button>
+            <button class="btn btn-sm" type="button" data-pg-example hidden>Load the official test values</button>
+          </div>
+          <p class="pg-note" data-pg-note aria-live="polite"></p>
+        </div>
+        <div class="pg-panel">
+          <div class="pg-step"><p class="pg-lab"><b>1</b>Signed content · <span data-pg-size></span></p><pre class="pg-pre" data-pg-signed></pre><p class="pg-legend">Blue: what the scheme adds before the body. ↵ marks a line break.</p></div>
+          <div class="pg-step"><p class="pg-lab"><b>2</b>HMAC key</p><p class="pg-key" data-pg-key></p></div>
+          <div class="pg-step"><p class="pg-lab"><b>3</b>Header the sender sent</p><pre class="pg-pre" data-pg-sent></pre></div>
+          <div class="pg-step"><p class="pg-lab"><b>4</b>What the receiver computes from what it got</p><pre class="pg-pre" data-pg-got></pre></div>
+          <p class="pg-verdict" data-pg-verdict aria-live="polite"></p>
+          <p class="pg-example" data-pg-example-out></p>
+          <p class="pg-lab">Check it yourself in a terminal</p>
+          <div class="cmd"><span class="p">$</span><code data-pg-cmd></code></div>
+        </div>
+      </div>
+    </div>
+    <noscript><div class="note warn"><span class="note-label">The playground needs JavaScript</span>Without it, you can still compute a signature in a terminal. GitHub's own test values: <code>printf '%s' 'Hello, World!' | openssl dgst -sha256 -hmac "It's a Secret to Everybody"</code> prints <code>757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17</code>. Add one character to the body and the result changes completely.</div></noscript>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="section section-rule" id="how-it-works" aria-labelledby="how-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 03</span> How it works</p>
+      <h2 id="how-h">Six ideas behind every webhook signature</h2>
+      <p>The providers differ in header names and string formats. Under that, they all do the same thing.</p>
+    </div>
+    <div class="cards cards-3">
+      <article class="card reveal">
+        <span class="card-idx">01 · The math</span>
+        <h3>HMAC-SHA256, in plain words</h3>
+        <p>HMAC takes a secret key and a message and returns a fixed-size fingerprint: 32 bytes, so 64 hex characters or 44 in base64. The same key and the same message always give the same result. Change one byte of either and the result looks unrelated. Without the key, nobody can produce a matching fingerprint for a message of their choice.</p>
+        <p>So when your result matches the header, two things are true: the sender knew the secret, and the bytes weren't changed on the way.</p>
+      </article>
+      <article class="card reveal reveal-d1">
+        <span class="card-idx">02 · The input</span>
+        <h3>Why it has to be the raw bytes</h3>
+        <p>The sender signed the exact bytes it sent, spaces and key order included. If your framework parses the JSON and you turn it back into text, you get <em>similar</em> bytes, not the same ones, and the HMAC changes. See the example below. Verify first, parse after.</p>
+        <p>Text encoding counts too: GitHub's docs say to handle the payload as UTF-8, because payloads can contain Unicode characters.</p>
+      </article>
+      <article class="card reveal reveal-d2">
+        <span class="card-idx">03 · The clock</span>
+        <h3>Timestamps stop replays</h3>
+        <p>A captured request with a valid signature stays valid forever, unless time is part of what's signed. Stripe, Slack and Standard Webhooks sign a timestamp with the body, so an attacker can't change it. You reject anything older than a few minutes: Stripe's libraries, Slack and the Standard Webhooks libraries all use 5 minutes.</p>
+      </article>
+      <article class="card reveal">
+        <span class="card-idx">04 · The comparison</span>
+        <h3>Compare in constant time</h3>
+        <p>A plain <code>==</code> stops at the first character that differs, so a wrong guess that starts right takes a little longer to reject. Measured over many requests, that can leak the signature piece by piece. <code>crypto.timingSafeEqual</code> and <code>hmac.compare_digest</code> take the same time either way. GitHub, Stripe, Slack and the Standard Webhooks spec all say to use one.</p>
+      </article>
+      <article class="card reveal reveal-d1">
+        <span class="card-idx">05 · The key</span>
+        <h3>Rotating a secret without downtime</h3>
+        <p>When you roll a Stripe endpoint secret, you can keep the old one active for up to 24 hours. Meanwhile Stripe signs with both and sends two <code>v1=</code> values in one header, so check every one. Standard Webhooks puts a space-separated list in <code>webhook-signature</code> for the same reason. After a Shopify client secret rotation, it can take up to an hour before deliveries use the new one.</p>
+      </article>
+      <article class="card reveal reveal-d2">
+        <span class="card-idx">06 · The transport</span>
+        <h3>Why HTTPS still matters</h3>
+        <p>A signature proves who sent the body. It doesn't hide it. Over plain HTTP, anyone on the path can read the payload and replay the request: within the window if it's timestamped, at any time if it isn't (GitHub and Shopify sign the body only). Stripe requires HTTPS for live-mode endpoints, and GitHub recommends HTTPS with SSL verification left on.</p>
+      </article>
+    </div>
+
+    <h3 style="margin-top:44px">Parse, then re-serialize: same data, different bytes</h3>
+    <p>One body, three byte strings. Each line is what that code actually printed, so each would get its own signature.</p>
+    <div class="table-wrap json-demo reveal">
+      <table>
+        <thead><tr><th scope="col">Where the bytes came from</th><th scope="col">Bytes</th><th scope="col">What changed</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">The raw request body</th><td><code>{"b":1, "2":true, "url":"https:\/\/x.io", "n":1.0, "name":"Zoë"}</code></td><td>The original. This is what was signed.</td></tr>
+          <tr><th scope="row">Node: <code>JSON.stringify(JSON.parse(raw))</code></th><td><code>{"2":true,"b":1,"url":"https://x.io","n":1,"name":"Zoë"}</code></td><td>Spaces gone, key <code>"2"</code> moved first, <code>\/</code> unescaped, <code>1.0</code> became <code>1</code></td></tr>
+          <tr><th scope="row">Python: <code>json.dumps(json.loads(raw))</code></th><td><code>{"b": 1, "2": true, "url": "https://x.io", "n": 1.0, "name": "Zo&#92;u00eb"}</code></td><td>Spaces changed, <code>\/</code> unescaped, <code>ë</code> escaped as <code>&#92;u00eb</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCHEMES ============ -->
+<section class="section section-rule" id="schemes" aria-labelledby="sch-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 04</span> Side by side</p>
+      <h2 id="sch-h">Five signature schemes compared</h2>
+      <p>What each provider puts in the header, what exactly it signs, and with which key. Checked against each provider's documentation in October 2026.</p>
+    </div>
+    <div class="table-wrap schemes reveal">
+      <table>
+        <thead><tr><th scope="col">Provider</th><th scope="col">Header · value</th><th scope="col">Signed content</th><th scope="col">Encoding</th><th scope="col">Key</th><th scope="col">Timestamp · window</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><a href="https://docs.stripe.com/webhooks" rel="noopener">Stripe</a></th><td><code>Stripe-Signature</code><br><code>t=…,v1=…</code></td><td><code>{t}.{body}</code></td><td>Hex</td><td>The endpoint's <code>whsec_…</code> secret, used as is</td><td><code>t=</code> in the same header<br>5 min (library default)</td></tr>
+          <tr><th scope="row"><a href="https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries" rel="noopener">GitHub</a></th><td><code>X-Hub-Signature-256</code><br><code>sha256=…</code></td><td><code>{body}</code></td><td>Hex</td><td>The webhook secret you chose</td><td>None<br>Use <code>X-GitHub-Delivery</code> to spot replays</td></tr>
+          <tr><th scope="row"><a href="https://docs.slack.dev/authentication/verifying-requests-from-slack" rel="noopener">Slack</a></th><td><code>X-Slack-Signature</code><br><code>v0=…</code></td><td><code>v0:{timestamp}:{body}</code></td><td>Hex</td><td>The app's signing secret</td><td><code>X-Slack-Request-Timestamp</code><br>5 min</td></tr>
+          <tr><th scope="row"><a href="https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" rel="noopener">Shopify</a></th><td><code>X-Shopify-Hmac-Sha256</code><br>the signature only</td><td><code>{body}</code></td><td>Base64</td><td>The app's client secret</td><td>Not signed<br>Skip a repeated <code>X-Shopify-Webhook-Id</code></td></tr>
+          <tr><th scope="row"><a href="https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md" rel="noopener">Standard Webhooks</a></th><td><code>webhook-signature</code><br><code>v1,…</code> (space-separated list)</td><td><code>{id}.{timestamp}.{body}</code></td><td>Base64</td><td>The part after <code>whsec_</code>, base64-decoded</td><td><code>webhook-timestamp</code><br>5 min (reference libraries)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">Stripe also sends a fake <code>v0=</code> signature on test events; ignore every scheme except <code>v1</code>. GitHub's <code>X-Hub-Signature</code> (no <code>-256</code>) is HMAC-SHA1 and only there for legacy integrations. Shopify sends an <code>X-Shopify-Triggered-At</code> header, but it isn't covered by the HMAC, so it can't prove an event is fresh.</p>
+  </div>
+</section>
+
+<!-- ============ CODE ============ -->
+<section class="section section-rule" id="code" aria-labelledby="code-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 05</span> The code</p>
+      <h2 id="code-h">Verify it in Node and Python</h2>
+      <p>Each example is a complete handler. We ran every one against correctly signed requests, a one-byte change, a wrong secret, a stale timestamp and missing headers: only the first was accepted. Node uses Express, Python uses Flask. Pick a language once and every tab follows.</p>
+    </div>
+
+    <h3 id="code-stripe">Stripe, with the official library</h3>
+    <p>The library parses the header, checks every <code>v1</code> signature in constant time and rejects timestamps older than 5 minutes. Use it if you can.</p>
+    <div class="tabs" data-tabs>
+      <div class="tab-list" role="tablist" aria-label="Language">
+        <button class="tab" role="tab" type="button" id="t-sl-node" aria-controls="p-sl-node" data-os="node">Node · Express</button>
+        <button class="tab" role="tab" type="button" id="t-sl-py" aria-controls="p-sl-py" data-os="py">Python · Flask</button>
+      </div>
+      <div class="tab-panel" role="tabpanel" id="p-sl-node" aria-labelledby="t-sl-node"><p class="tab-title">Node · Express</p><div class="code"><div class="code-head"><span>server.js</span></div><pre><code>import express from "express";
+import Stripe from "stripe";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const app = express();
+
+<span class="c">// Raw body on this route: the signature covers the exact bytes.</span>
+app.post("/webhook", express.raw({ type: "application/json" }), (req, res) =&gt; {
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body, req.headers["stripe-signature"], process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    return res.status(400).send(`Bad signature: ${err.message}`);
+  }
+  res.sendStatus(200);
+  <span class="c">// …then handle event.type, and skip event.id values you've already seen</span>
+});
+
+app.use(express.json());  <span class="c">// JSON parsing for every other route, after the webhook</span>
+app.listen(3000);</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="p-sl-py" aria-labelledby="t-sl-py"><p class="tab-title">Python · Flask</p><div class="code"><div class="code-head"><span>app.py</span></div><pre><code>import os
+import stripe
+from flask import Flask, request
+
+app = Flask(__name__)
+
+@app.post("/webhook")
+def webhook():
+    payload = request.get_data()  <span class="c"># the raw bytes; request.json would be too late</span>
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, request.headers.get("Stripe-Signature"),
+            os.environ["STRIPE_WEBHOOK_SECRET"])
+    except (ValueError, stripe.error.SignatureVerificationError):
+        return "Bad signature", 400
+    <span class="c"># …handle event["type"], and skip event["id"] values you've already seen</span>
+    return "", 200</code></pre></div></div>
+    </div>
+
+    <h3 id="code-stripe-manual">Stripe, by hand</h3>
+    <p>What the library does, following Stripe's manual steps: split the header on <code>,</code> and <code>=</code>, keep <code>t</code> and every <code>v1</code>, sign <code>{t}.{body}</code>, compare each in constant time, check the age.</p>
+    <div class="tabs" data-tabs>
+      <div class="tab-list" role="tablist" aria-label="Language">
+        <button class="tab" role="tab" type="button" id="t-sm-node" aria-controls="p-sm-node" data-os="node">Node · Express</button>
+        <button class="tab" role="tab" type="button" id="t-sm-py" aria-controls="p-sm-py" data-os="py">Python · Flask</button>
+      </div>
+      <div class="tab-panel" role="tabpanel" id="p-sm-node" aria-labelledby="t-sm-node"><p class="tab-title">Node · Express</p><div class="code"><div class="code-head"><span>server.js</span></div><pre><code>import crypto from "node:crypto";
+import express from "express";
+
+const app = express();
+
+<span class="c">// timingSafeEqual throws if the lengths differ, so check that first.</span>
+function safeEqual(a, b) {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length &amp;&amp; crypto.timingSafeEqual(x, y);
+}
+
+function verifyStripe(rawBody, header = "", secret, tolerance = 300) {
+  const items = header.split(",").map((part) =&gt; part.split("="));
+  const t = items.find(([k]) =&gt; k === "t")?.[1];
+  const sigs = items.filter(([k]) =&gt; k === "v1").map(([, v]) =&gt; v);  <span class="c">// two during a secret roll</span>
+  if (!t || sigs.length === 0) return false;
+  const age = Math.abs(Date.now() / 1000 - Number(t));
+  if (!(age &lt;= tolerance)) return false;  <span class="c">// also rejects a non-numeric t</span>
+  const expected = crypto.createHmac("sha256", secret)
+    .update(`${t}.`).update(rawBody).digest("hex");
+  return sigs.some((sig) =&gt; safeEqual(expected, sig));
+}
+
+app.post("/webhook", express.raw({ type: "application/json" }), (req, res) =&gt; {
+  if (!Buffer.isBuffer(req.body) ||
+      !verifyStripe(req.body, req.get("Stripe-Signature"), process.env.STRIPE_WEBHOOK_SECRET)) {
+    return res.sendStatus(400);
+  }
+  const event = JSON.parse(req.body.toString("utf8"));  <span class="c">// parse only after the check</span>
+  res.sendStatus(200);
+});
+
+app.listen(3000);</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="p-sm-py" aria-labelledby="t-sm-py"><p class="tab-title">Python · Flask</p><div class="code"><div class="code-head"><span>app.py</span></div><pre><code>import hashlib
+import hmac
+import json
+import os
+import time
+from flask import Flask, request
+
+app = Flask(__name__)
+
+def verify_stripe(payload: bytes, header: str, secret: str, tolerance=300) -&gt; bool:
+    items = [part.split("=", 1) for part in (header or "").split(",") if "=" in part]
+    t = next((v for k, v in items if k == "t"), "")
+    sigs = [v for k, v in items if k == "v1"]  <span class="c"># two during a secret roll</span>
+    if not (t.isascii() and t.isdigit()) or not sigs or abs(time.time() - int(t)) &gt; tolerance:
+        return False
+    expected = hmac.new(secret.encode(), t.encode() + b"." + payload, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected.encode(), sig.encode()) for sig in sigs)
+
+@app.post("/webhook")
+def webhook():
+    payload = request.get_data()
+    if not verify_stripe(payload, request.headers.get("Stripe-Signature"),
+                         os.environ["STRIPE_WEBHOOK_SECRET"]):
+        return "Bad signature", 400
+    event = json.loads(payload)  <span class="c"># parse only after the check</span>
+    return "", 200</code></pre></div></div>
+    </div>
+
+    <h3 id="code-github">GitHub · X-Hub-Signature-256</h3>
+    <p>GitHub signs the body only, as <code>sha256=</code> plus hex. The header is missing entirely if the webhook has no secret. To test your code, GitHub's docs give the secret <code>It's a Secret to Everybody</code> and the body <code>Hello, World!</code>, which must give <code>sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17</code>.</p>
+    <div class="tabs" data-tabs>
+      <div class="tab-list" role="tablist" aria-label="Language">
+        <button class="tab" role="tab" type="button" id="t-gh-node" aria-controls="p-gh-node" data-os="node">Node · Express</button>
+        <button class="tab" role="tab" type="button" id="t-gh-py" aria-controls="p-gh-py" data-os="py">Python · Flask</button>
+      </div>
+      <div class="tab-panel" role="tabpanel" id="p-gh-node" aria-labelledby="t-gh-node"><p class="tab-title">Node · Express</p><div class="code"><div class="code-head"><span>server.js</span></div><pre><code>import crypto from "node:crypto";
+import express from "express";
+
+const app = express();
+const secret = process.env.GITHUB_WEBHOOK_SECRET;
+
+<span class="c">// timingSafeEqual throws if the lengths differ, so check that first.</span>
+function safeEqual(a, b) {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length &amp;&amp; crypto.timingSafeEqual(x, y);
+}
+
+<span class="c">// GitHub payloads can be up to 25 MB; express.raw stops at 100 kB by default.</span>
+app.post("/webhook", express.raw({ type: "*/*", limit: "25mb" }), (req, res) =&gt; {
+  if (!Buffer.isBuffer(req.body)) return res.sendStatus(400);
+  const expected = "sha256=" +
+    crypto.createHmac("sha256", secret).update(req.body).digest("hex");
+  if (!safeEqual(expected, req.get("X-Hub-Signature-256") ?? "")) {
+    return res.sendStatus(401);
+  }
+  const event = JSON.parse(req.body.toString("utf8"));  <span class="c">// with content type application/json</span>
+  res.sendStatus(204);
+});
+
+app.listen(3000);</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="p-gh-py" aria-labelledby="t-gh-py"><p class="tab-title">Python · Flask</p><div class="code"><div class="code-head"><span>app.py</span></div><pre><code>import hashlib
+import hmac
+import os
+from flask import Flask, abort, request
+
+app = Flask(__name__)
+SECRET = os.environ["GITHUB_WEBHOOK_SECRET"].encode()
+
+@app.post("/webhook")
+def github_webhook():
+    body = request.get_data()  <span class="c"># raw bytes: read them before request.json or request.form</span>
+    expected = "sha256=" + hmac.new(SECRET, body, hashlib.sha256).hexdigest()
+    received = request.headers.get("X-Hub-Signature-256", "")
+    if not hmac.compare_digest(expected.encode(), received.encode()):
+        abort(401)
+    event = request.get_json()  <span class="c"># with content type application/json</span>
+    return "", 204</code></pre></div></div>
+    </div>
+
+    <h3 id="code-slack">Slack · signing secret</h3>
+    <p>Slack signs <code>v0:{timestamp}:{body}</code>. Slash commands arrive form-encoded, so in Flask read the bytes with <code>request.get_data()</code> before anything touches <code>request.form</code>: after the form is parsed, Flask can't give them back.</p>
+    <div class="tabs" data-tabs>
+      <div class="tab-list" role="tablist" aria-label="Language">
+        <button class="tab" role="tab" type="button" id="t-sk-node" aria-controls="p-sk-node" data-os="node">Node · Express</button>
+        <button class="tab" role="tab" type="button" id="t-sk-py" aria-controls="p-sk-py" data-os="py">Python · Flask</button>
+      </div>
+      <div class="tab-panel" role="tabpanel" id="p-sk-node" aria-labelledby="t-sk-node"><p class="tab-title">Node · Express</p><div class="code"><div class="code-head"><span>server.js</span></div><pre><code>import crypto from "node:crypto";
+import express from "express";
+
+const app = express();
+const secret = process.env.SLACK_SIGNING_SECRET;
+
+<span class="c">// timingSafeEqual throws if the lengths differ, so check that first.</span>
+function safeEqual(a, b) {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length &amp;&amp; crypto.timingSafeEqual(x, y);
+}
+
+app.post("/slack/events", express.raw({ type: "*/*" }), (req, res) =&gt; {
+  if (!Buffer.isBuffer(req.body)) return res.sendStatus(400);
+  const ts = req.get("X-Slack-Request-Timestamp") ?? "";
+  const age = Math.abs(Date.now() / 1000 - Number(ts));
+  if (!(age &lt;= 300)) return res.sendStatus(401);  <span class="c">// older than 5 minutes, or not a number</span>
+  const expected = "v0=" + crypto.createHmac("sha256", secret)
+    .update(`v0:${ts}:`).update(req.body).digest("hex");
+  if (!safeEqual(expected, req.get("X-Slack-Signature") ?? "")) {
+    return res.sendStatus(401);
+  }
+  res.sendStatus(200);
+  <span class="c">// …then parse: JSON for the Events API, a form for slash commands</span>
+});
+
+app.listen(3000);</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="p-sk-py" aria-labelledby="t-sk-py"><p class="tab-title">Python · Flask</p><div class="code"><div class="code-head"><span>app.py</span></div><pre><code>import hashlib
+import hmac
+import os
+import time
+from flask import Flask, abort, request
+
+app = Flask(__name__)
+SECRET = os.environ["SLACK_SIGNING_SECRET"].encode()
+
+@app.post("/slack/events")
+def slack_events():
+    body = request.get_data()  <span class="c"># first: once request.form has run, the bytes are gone</span>
+    ts = request.headers.get("X-Slack-Request-Timestamp", "")
+    if not (ts.isascii() and ts.isdigit()) or abs(time.time() - int(ts)) &gt; 300:
+        abort(401)  <span class="c"># older than 5 minutes, or not a number</span>
+    base = b"v0:" + ts.encode() + b":" + body
+    expected = "v0=" + hmac.new(SECRET, base, hashlib.sha256).hexdigest()
+    received = request.headers.get("X-Slack-Signature", "")
+    if not hmac.compare_digest(expected.encode(), received.encode()):
+        abort(401)
+    return "", 200</code></pre></div></div>
+    </div>
+
+    <h3 id="code-shopify">Shopify · X-Shopify-Hmac-Sha256</h3>
+    <p>The body only, keyed with the app's client secret, and base64 instead of hex.</p>
+    <div class="tabs" data-tabs>
+      <div class="tab-list" role="tablist" aria-label="Language">
+        <button class="tab" role="tab" type="button" id="t-sh-node" aria-controls="p-sh-node" data-os="node">Node · Express</button>
+        <button class="tab" role="tab" type="button" id="t-sh-py" aria-controls="p-sh-py" data-os="py">Python · Flask</button>
+      </div>
+      <div class="tab-panel" role="tabpanel" id="p-sh-node" aria-labelledby="t-sh-node"><p class="tab-title">Node · Express</p><div class="code"><div class="code-head"><span>server.js</span></div><pre><code>import crypto from "node:crypto";
+import express from "express";
+
+const app = express();
+const secret = process.env.SHOPIFY_CLIENT_SECRET;
+
+<span class="c">// timingSafeEqual throws if the lengths differ, so check that first.</span>
+function safeEqual(a, b) {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length &amp;&amp; crypto.timingSafeEqual(x, y);
+}
+
+app.post("/webhooks", express.raw({ type: "*/*" }), (req, res) =&gt; {
+  if (!Buffer.isBuffer(req.body)) return res.sendStatus(400);
+  const expected = crypto.createHmac("sha256", secret).update(req.body).digest("base64");
+  if (!safeEqual(expected, req.get("X-Shopify-Hmac-Sha256") ?? "")) {
+    return res.sendStatus(401);
+  }
+  res.sendStatus(200);
+  <span class="c">// …then skip X-Shopify-Webhook-Id values you've already handled</span>
+});
+
+app.listen(3000);</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="p-sh-py" aria-labelledby="t-sh-py"><p class="tab-title">Python · Flask</p><div class="code"><div class="code-head"><span>app.py</span></div><pre><code>import base64
+import hashlib
+import hmac
+import os
+from flask import Flask, abort, request
+
+app = Flask(__name__)
+SECRET = os.environ["SHOPIFY_CLIENT_SECRET"].encode()
+
+@app.post("/webhooks")
+def shopify_webhook():
+    body = request.get_data()
+    digest = hmac.new(SECRET, body, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode()  <span class="c"># base64, not hex</span>
+    received = request.headers.get("X-Shopify-Hmac-Sha256", "")
+    if not hmac.compare_digest(expected.encode(), received.encode()):
+        abort(401)
+    return "", 200</code></pre></div></div>
+    </div>
+
+    <h3 id="code-standard">Standard Webhooks</h3>
+    <p>The spec's reference libraries (<code>standardwebhooks</code> on npm and PyPI) take the <code>whsec_…</code> string, decode the key, check every <code>v1</code> signature and reject timestamps more than 5 minutes off in either direction.</p>
+    <div class="tabs" data-tabs>
+      <div class="tab-list" role="tablist" aria-label="Language">
+        <button class="tab" role="tab" type="button" id="t-sw-node" aria-controls="p-sw-node" data-os="node">Node · Express</button>
+        <button class="tab" role="tab" type="button" id="t-sw-py" aria-controls="p-sw-py" data-os="py">Python · Flask</button>
+      </div>
+      <div class="tab-panel" role="tabpanel" id="p-sw-node" aria-labelledby="t-sw-node"><p class="tab-title">Node · Express</p><div class="code"><div class="code-head"><span>server.js</span></div><pre><code>import express from "express";
+import { Webhook } from "standardwebhooks";
+
+const app = express();
+<span class="c">// Takes the "whsec_…" string: strips the prefix and base64-decodes the rest.</span>
+const wh = new Webhook(process.env.WEBHOOK_SECRET);
+
+app.post("/webhook", express.raw({ type: "*/*" }), (req, res) =&gt; {
+  let event;
+  try {
+    event = wh.verify(req.body, req.headers);  <span class="c">// checks signature and 5-minute window</span>
+  } catch (err) {
+    return res.sendStatus(401);
+  }
+  res.sendStatus(204);
+});
+
+app.listen(3000);</code></pre></div></div>
+      <div class="tab-panel" role="tabpanel" id="p-sw-py" aria-labelledby="t-sw-py"><p class="tab-title">Python · Flask</p><div class="code"><div class="code-head"><span>app.py</span></div><pre><code>import os
+from flask import Flask, abort, request
+from standardwebhooks.webhooks import Webhook, WebhookVerificationError
+
+app = Flask(__name__)
+<span class="c"># Takes the "whsec_…" string: strips the prefix and base64-decodes the rest.</span>
+wh = Webhook(os.environ["WEBHOOK_SECRET"])
+
+@app.post("/webhook")
+def webhook():
+    try:
+        event = wh.verify(request.get_data(), dict(request.headers))
+    except WebhookVerificationError:
+        abort(401)
+    return "", 204</code></pre></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAILURES ============ -->
+<section class="section section-rule" id="failures" aria-labelledby="fl-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 06</span> When it fails</p>
+      <h2 id="fl-h">Why signature verification fails</h2>
+      <p>Nearly every failure is one of these. The first two account for most of them.</p>
+    </div>
+
+    <article class="fix" id="wrong-secret">
+      <div class="fix-head"><span class="n">01</span><h3>The secret is the wrong one</h3></div>
+      <p class="symptom">No signatures found matching the expected signature for payload · every request fails, even fresh ones</p>
+      <p>Stripe's docs call this the most common cause. Each Stripe endpoint has its own <code>whsec_</code> secret, and an endpoint used in both test and live mode has a different secret for each. Events forwarded by <code>stripe listen</code> are signed with the secret the CLI prints, not the Dashboard's. For Slack, use the <strong>Signing Secret</strong>, not the Client Secret. For Shopify, the app's client secret; after you rotate it, Shopify can take up to an hour to switch.</p>
+      <p>Then check for invisible extras: a trailing newline or space copied into an <code>.env</code> file is part of the key. Stripe's Node library adds a note to its error when the secret contains whitespace.</p>
+    </article>
+
+    <article class="fix" id="parsed-body">
+      <div class="fix-head"><span class="n">02</span><h3>The body was parsed before you checked it</h3></div>
+      <p class="symptom">Webhook payload must be provided as a string or a Buffer … Payload was provided as a parsed JavaScript object instead</p>
+      <p>A JSON middleware ran first, so your code got an object, or a re-serialized string, instead of the bytes that were signed. In Express, put <code>express.raw()</code> on the webhook route and mount <code>app.use(express.json())</code> <em>after</em> it: Express runs middleware in order. In Flask, call <code>request.get_data()</code> before <code>request.json</code> or <code>request.form</code>. Stripe's troubleshooting guide lists the fixes for Next.js and AWS API Gateway too.</p>
+    </article>
+
+    <article class="fix" id="encoding">
+      <div class="fix-head"><span class="n">03</span><h3>Hex where the provider uses base64, or the reverse</h3></div>
+      <p class="symptom">Your value is 64 characters, the header's is 44 (or the other way round)</p>
+      <p>The bytes are the same; the text isn't. SHA-256 gives 32 bytes: 64 characters in hex, 44 in base64 (ending in <code>=</code>). Stripe, GitHub and Slack use hex; Shopify and Standard Webhooks use base64. Also keep or drop the prefix consistently: GitHub's header starts with <code>sha256=</code>, Slack's with <code>v0=</code>, Standard Webhooks' with <code>v1,</code>.</p>
+    </article>
+
+    <article class="fix" id="whitespace">
+      <div class="fix-head"><span class="n">04</span><h3>A tool added or removed whitespace</h3></div>
+      <p class="symptom">A replayed or hand-made request fails, while the real delivery passed</p>
+      <p>Editors often save a fixture file with a final newline, and <code>echo</code> adds one too. <code>curl -d @file.json</code> strips carriage returns and newlines from the file. When you replay a captured body, send it byte for byte: <code>printf '%s'</code> or <code>--data-binary @file.json</code>. Then remember the timestamp: a replay of an old capture is rejected as too old, by design.</p>
+    </article>
+
+    <article class="fix" id="clock">
+      <div class="fix-head"><span class="n">05</span><h3>Your server's clock is off</h3></div>
+      <p class="symptom">Timestamp outside the tolerance zone · valid signatures rejected</p>
+      <p>The signature matches, but the age check fails because your clock says it's later (or earlier) than it is. Stripe recommends NTP to keep your server's clock in sync. Don't "fix" it by setting the tolerance to 0: in Stripe's libraries, that turns the check off entirely.</p>
+    </article>
+
+    <article class="fix" id="proxy">
+      <div class="fix-head"><span class="n">06</span><h3>A proxy or relay changed the body</h3></div>
+      <p class="symptom">It passes in the webhook tester, fails in your app</p>
+      <p>Something between the provider and your code rewrote the bytes. The smee.io client parses the JSON and writes it out again, so whitespace and escapes can change (<a href="https://github.com/probot/smee-client/issues/325" rel="noopener">smee-client#325</a>). An AWS API Gateway mapping template needs extra setup to pass the raw body through. GitHub's troubleshooting list says the same about proxies and load balancers: they must not modify the payload or headers. Stripe's library error says it too: a forwarding tool has to keep "the exact request body, including JSON formatting and new line style".</p>
+    </article>
+
+    <article class="fix" id="equals">
+      <div class="fix-head"><span class="n">07</span><h3>Comparing with <code>==</code>, or crashing on length</h3></div>
+      <p class="symptom">It works, but leaks timing · or a garbage header gives a 500 instead of a 401</p>
+      <p>A plain <code>==</code> or <code>===</code> leaks timing; use a constant-time comparison. But note: Node's <code>crypto.timingSafeEqual</code> throws if the two buffers have different lengths, so check the length first, as the <code>safeEqual</code> helper above does. Python's <code>hmac.compare_digest</code> accepts <code>str</code> only if it's ASCII and raises <code>TypeError</code> otherwise; comparing encoded bytes, as above, avoids that on odd input.</p>
+    </article>
+
+    <article class="fix" id="rotation">
+      <div class="fix-head"><span class="n">08</span><h3>Only the first signature was checked</h3></div>
+      <p class="symptom">Verification starts failing right after you roll a Stripe secret</p>
+      <p>During a roll, Stripe sends one <code>v1=</code> per active secret. Code that reads only the first one fails whenever the match is in another position. Check every <code>v1</code> value and accept if any matches. The same goes for each entry in a Standard Webhooks <code>webhook-signature</code> list.</p>
+    </article>
+
+    <article class="fix" id="standard-key">
+      <div class="fix-head"><span class="n">09</span><h3>The Standard Webhooks secret wasn't decoded</h3></div>
+      <p class="symptom">No matching signature found · with a secret you just copied</p>
+      <p>A Standard Webhooks secret looks like Stripe's, <code>whsec_</code> plus text, but it's used differently. Stripe uses the whole string as the key. Standard Webhooks strips <code>whsec_</code> and base64-decodes the rest, and that decoded data is the key. Feed the string straight into <code>createHmac</code> and every signature fails. Switch the playground to Standard Webhooks to see the decoded key length.</p>
+    </article>
+
+    <div class="note reveal" style="margin-top:28px"><span class="note-label">Check a real request</span>Point the provider at the <a href="/webhook-tester.html">webhook tester</a>, trigger an event, open the request, and paste your secret into the <strong>Signature</strong> tab. It shows the signed content, the value in the header and the value it computed, in your browser. If it passes there and fails in your app, your app (or something in front of it) changed the bytes. If it fails there too, the secret is wrong.</div>
+  </div>
+</section>
+
+<!-- ============ GO LIVE ============ -->
+<section class="section section-rule" id="go-live" aria-labelledby="lp-h">
+  <div class="wrap">
+    <div class="launchpad reveal" data-launchpad data-tpl="Build me a webhook receiver for {idea}. It should verify the provider's signature over the raw request body, reject requests older than five minutes, answer 200 quickly and do the work after, and ignore duplicate event IDs. Add a Dockerfile, deploy it to cloudish.ai using the instructions at https://cloudish.ai/skill.md, and send me the live URL to paste into the provider. If you can't run commands yourself, give me the exact steps to run in my terminal.">
+      <div class="lp-head">
+        <div>
+          <p class="eyebrow"><span class="idx">§ 07</span> Ship it</p>
+          <h2 id="lp-h">Verification works on your laptop?<br>Put it where the provider can reach it.</h2>
+        </div>
+        <span class="badge">One sentence · no dashboard</span>
+      </div>
+      <div class="lp-grid">
+        <div class="lp-card">
+          <span class="lp-step"><i>A</i> Your handler checks signatures?</span>
+          <h3>Ask your coding agent</h3>
+          <p>Open a terminal in your project folder and paste one of these. The agent packages your code, deploys it, and hands you back a permanent HTTPS URL to register once.</p>
+          <div class="cmd"><span class="p">$</span><code>claude "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <div class="cmd"><span class="p">$</span><code>codex "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <p class="fineprint">Keep the signing secret out of your code: the agent can store it as an encrypted secret on the server.</p>
+        </div>
+        <div class="lp-card">
+          <span class="lp-step"><i>B</i> Starting from zero?</span>
+          <h3>Have one built and deployed</h3>
+          <label class="visually-hidden" for="idea-sig">Which webhooks should it receive?</label>
+          <input class="field" id="idea-sig" data-idea type="text" placeholder="Stripe payment events that email me each new sale" autocomplete="off">
+          <div class="chips" style="margin:10px 0 4px">
+            <button type="button" class="chip" data-idea-chip="GitHub push events that post a summary to a Discord channel" aria-pressed="false">GitHub → Discord</button>
+            <button type="button" class="chip" data-idea-chip="Shopify orders that append a row to a Google Sheet" aria-pressed="false">Shopify → Sheet</button>
+            <button type="button" class="chip" data-idea-chip="Slack slash commands that look up an order by ID" aria-pressed="false">Slack command</button>
+          </div>
+          <div class="ai-buttons">
+            <a class="ai-btn" data-ai="chatgpt" href="https://chatgpt.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true">G</span><span>ChatGPT<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="claude" href="https://claude.ai/new" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#c2410c">C</span><span>Claude<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="grok" href="https://grok.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#334155">X</span><span>Grok<small>Open with prompt</small></span></a>
+          </div>
+          <p class="fineprint">Chat assistants deploy for you when they can run code with internet access; otherwise they'll give you the exact commands.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="section section-rule" id="faq" aria-labelledby="faq-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 08</span> FAQ</p>
+      <h2 id="faq-h">Frequently asked questions</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>How do I verify a webhook signature?</summary>
+        <div class="faq-a"><p>Read the raw request body as bytes and build the provider's signed content from it (for Stripe: the timestamp, a dot, then the body). Compute HMAC-SHA256 over it with your signing secret, encode the result the way the provider does (hex or base64), and compare it with the header using a constant-time function. If the scheme has a timestamp, also reject requests more than about five minutes old.</p></div>
+      </details>
+      <details>
+        <summary>Why does Stripe say "No signatures found matching the expected signature for payload"?</summary>
+        <div class="faq-a"><p>One of the three inputs is wrong. Usually the body was parsed or changed before you passed it in, so pass the raw Buffer or bytes. Or the <code>whsec_</code> secret is the wrong one: <code>stripe listen</code>, each Dashboard endpoint, and test versus live mode each have their own.</p></div>
+      </details>
+      <details>
+        <summary>What is X-Hub-Signature-256?</summary>
+        <div class="faq-a"><p>The header GitHub adds to a webhook delivery when the webhook has a secret. Its value is <code>sha256=</code> followed by the HMAC-SHA256 hex digest of the request body, keyed with that secret. The older <code>X-Hub-Signature</code> header uses SHA-1 and is only included for legacy purposes.</p></div>
+      </details>
+      <details>
+        <summary>How do I verify a Shopify webhook HMAC?</summary>
+        <div class="faq-a"><p>Compute HMAC-SHA256 of the raw request body with your app's client secret, base64-encode it, and compare it with the <code>X-Shopify-Hmac-Sha256</code> header in constant time. After you rotate the client secret, it can take up to an hour before Shopify signs with the new one.</p></div>
+      </details>
+      <details>
+        <summary>How do I verify Slack requests with the signing secret?</summary>
+        <div class="faq-a"><p>Join <code>v0</code>, the <code>X-Slack-Request-Timestamp</code> value and the raw body with colons. Compute HMAC-SHA256 over that with your app's signing secret (in the app admin panel under Basic Info), prefix the hex digest with <code>v0=</code>, and compare it with <code>X-Slack-Signature</code> using an HMAC compare function. Reject timestamps more than five minutes from your server's time.</p></div>
+      </details>
+      <details>
+        <summary>If webhooks are signed, do I still need HTTPS?</summary>
+        <div class="faq-a"><p>Yes. A signature proves who sent the body and that it wasn't changed, but it doesn't hide it. Without TLS, anyone on the network path can read the payload and replay the captured request: within the time window for schemes with a timestamp, and at any time for schemes without one. Stripe requires HTTPS for live-mode endpoints.</p></div>
+      </details>
+      <details>
+        <summary>Why compare signatures in constant time?</summary>
+        <div class="faq-a"><p>A normal string comparison stops at the first character that differs, so the time it takes leaks how much of a guess was right. Over many requests, an attacker could in principle build a valid signature one character at a time. Use <code>crypto.timingSafeEqual</code> in Node or <code>hmac.compare_digest</code> in Python.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="section-tight" aria-label="Next chapter">
+  <div class="wrap">
+    <a class="next-chapter reveal" href="/deploy-webhook-receiver.html">
+      <span><small>Next · Chapter 05</small><strong>Deploy a webhook receiver</strong><span class="sub">Give your handler a permanent HTTPS URL that keeps answering when your laptop is closed.</span></span>
+      <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg><span class="logo-text">whatis<b>webhook</b></span></a>
+        <p>A visual field guide to webhooks: what they are, how to test them, why they fail, and where they should live.</p>
+      </div>
+      <div class="footer-col"><h2>Chapters</h2><ul>
+        <li><a href="/">01 · What is a webhook?</a></li>
+        <li><a href="/test-webhook-locally.html">02 · Test a webhook locally</a></li>
+        <li><a href="/webhook-not-working.html">03 · Webhook not working</a></li>
+        <li><a href="/verify-webhook-signatures.html">04 · Verify signatures</a></li>
+        <li><a href="/deploy-webhook-receiver.html">05 · Deploy a receiver</a></li>
+        <li><a href="/webhook-tester.html">Tool · Webhook tester</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>Primary sources</h2><ul>
+        <li><a href="https://docs.stripe.com/webhooks" rel="noopener">Stripe · webhooks &amp; signatures</a></li>
+        <li><a href="https://docs.stripe.com/events/manage-webhook-endpoints#signature-errors" rel="noopener">Stripe · signature errors</a></li>
+        <li><a href="https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries" rel="noopener">GitHub · validating deliveries</a></li>
+        <li><a href="https://docs.slack.dev/authentication/verifying-requests-from-slack" rel="noopener">Slack · verifying requests</a></li>
+        <li><a href="https://shopify.dev/docs/apps/build/webhooks/verify-deliveries" rel="noopener">Shopify · verify deliveries</a></li>
+        <li><a href="https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md" rel="noopener">Standard Webhooks · spec</a></li>
+        <li><a href="https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b" rel="noopener">Node.js · timingSafeEqual</a></li>
+        <li><a href="https://docs.python.org/3/library/hmac.html" rel="noopener">Python · hmac</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>For machines</h2><ul>
+        <li><a href="/llms.txt">llms.txt</a></li>
+        <li><a href="/sitemap.xml">sitemap.xml</a></li>
+        <li><a href="https://cloudish.ai/skill.md" rel="noopener">Cloudish deploy skill</a></li>
+      </ul></div>
+    </div>
+    <div class="titleblock">
+      <div><span>Project</span><strong>What is a webhook? A field guide</strong></div>
+      <div><span>Sheet</span><strong>04 of 05</strong></div>
+      <div><span>Drawing</span><strong>Signatures</strong></div>
+      <div><span>Rev</span><strong>1.0.0</strong></div>
+      <div><span>Scale</span><strong>1 byte : 1 signature</strong></div>
+      <div><span>Deployed on</span><strong><a href="https://cloudish.ai/" rel="noopener">Cloudish.ai</a> — not a laptop</strong></div>
+    </div>
+    <div class="footer-legal"><span>© 2026 whatiswebhook.com</span><span>Drawn in blueprint blue. Every request answered from a data center.</span></div>
+  </div>
+</footer>
+<script src="/script.js?v=1.0.0" defer></script>
+<script src="/signatures.js?v=1.0.0" defer></script>
+</body>
+</html>

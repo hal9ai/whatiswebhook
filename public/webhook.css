@@ -93,3 +93,8 @@ select.field { width: auto; cursor: pointer; }
 .calc-col dd { margin: 0; font: 600 .98rem/1.4 var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; }
 .calc .fineprint { margin: 16px 0 0; }
 @media (max-width: 560px) { .calc-in, .calc-out { grid-template-columns: 1fr; } }
+
+/* Grid columns may hold code that scrolls: let them shrink below its width. */
+.split > * { min-width: 0; }
+@media (max-width: 560px) { .eyebrow { white-space: normal; } }
+.faq summary { overflow-wrap: anywhere; }

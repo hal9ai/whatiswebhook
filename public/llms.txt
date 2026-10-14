@@ -1,0 +1,29 @@
+# whatiswebhook.com
+
+> A visual field guide to webhooks: what they are, how to test them locally, why deliveries fail, how to verify signatures, and how to deploy a receiver. Includes a free webhook tester that records requests sent to a public URL.
+
+## Key facts
+
+- A webhook is an HTTP request (almost always POST, usually with a JSON body) that a service sends to a URL you register, when an event happens. It reverses the direction of an API call: the service starts the request and your server answers.
+- The receiving URL must be reachable from the internet, normally over HTTPS. A provider can't call localhost: localhost resolves on the provider's own machine, and home routers drop unsolicited inbound connections.
+- Testing locally: use the provider's CLI when it has one (`stripe listen --forward-to localhost:3000/webhook`, which signs with its own whsec_ secret; `gh webhook forward --repo=OWNER/REPO --events=issues --url=http://localhost:3000/webhook` for GitHub repository and organization webhooks), or a tunnel (ngrok needs a free account and gives one stable dev domain; `cloudflared tunnel --url http://localhost:3000` needs no account and gives a new trycloudflare.com URL each run). Relays that re-serialize JSON, such as the smee.io client, can break HMAC signature checks.
+- Deadlines: Slack expects a 2xx within 3 seconds, Shopify within 5 seconds (1 second to connect), GitHub within 10 seconds. Answer first, then do slow work.
+- Retries: Stripe retries for up to 3 days in live mode (3 times over a few hours in sandboxes); Shopify 8 times over 4 hours; Slack up to 3 times; GitHub does not redeliver automatically. Retries reuse the event or delivery ID, so receivers should skip IDs they've already handled. Order is not guaranteed.
+- Signatures (HMAC-SHA256 over the raw body bytes): Stripe `Stripe-Signature: t=<ts>,v1=<hex>` over `<ts>.<body>`; GitHub `X-Hub-Signature-256: sha256=<hex>` over the body; Slack `X-Slack-Signature: v0=<hex>` over `v0:<X-Slack-Request-Timestamp>:<body>`; Shopify `X-Shopify-Hmac-Sha256: <base64>` over the body with the app's client secret; Standard Webhooks `webhook-signature: v1,<base64>` over `<webhook-id>.<webhook-timestamp>.<body>` with the base64-decoded secret after its whsec_ prefix. Reject timestamps older than about 5 minutes, compare in constant time, and verify before parsing: re-serializing parsed JSON doesn't reliably reproduce the bytes.
+- Deploying a receiver: it needs a stable public HTTPS URL, answers within the provider's deadline even after idling (a host that sleeps idle apps must wake faster than the deadline, or keep the app always on), keeps the signing secret in encrypted host settings, and listens on 0.0.0.0 inside its container.
+- Deploy in one sentence with a coding agent: in the project folder run `claude "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"` (or the same prompt with `codex`).
+
+## Chapters
+
+- [What is a webhook?](https://whatiswebhook.com/): Webhooks vs polling, one Stripe payment step by step, what a delivery looks like on the wire, a polling cost calculator, webhooks vs API vs WebSocket vs server-sent events, and common examples.
+- [How to test a webhook locally](https://whatiswebhook.com/test-webhook-locally.html): Provider CLIs, tunnels, capture and replay, and a dev deploy compared; commands for the Stripe CLI, GitHub CLI, ngrok and Cloudflare Quick Tunnels; a handler that verifies over the raw body; seven local-only traps.
+- [Webhook not working?](https://whatiswebhook.com/webhook-not-working.html): Where each provider shows its delivery log and how to redeliver, a status-code table, how to reproduce a failure, and fixes for missing, timed-out, duplicated, redirected and blocked deliveries.
+- [Verify webhook signatures](https://whatiswebhook.com/verify-webhook-signatures.html): HMAC explained with an interactive playground, the signature scheme of Stripe, GitHub, Slack, Shopify and Standard Webhooks, verified code in Node and Python, and common verification failures.
+- [Deploy a webhook receiver](https://whatiswebhook.com/deploy-webhook-receiver.html): What a production receiver needs, a complete dependency-free receiver with a Dockerfile, cold starts versus provider deadlines, and the deploy commands.
+- [Webhook tester](https://whatiswebhook.com/webhook-tester.html): Get a public URL that records every request for an hour after its last use, inspect headers and exact body bytes, check signatures in the browser, and replay a request to localhost with curl. Its API: POST /api/bins creates a URL; GET /api/bins/{id} lists captured requests.
+
+## Optional
+
+- [Cloudish deploy skill](https://cloudish.ai/skill.md): The full API an AI agent follows to deploy a container to cloudish.ai.
+- [whatislocalhost.com](https://whatislocalhost.com/): The companion guide to localhost, ports and the cloud.
+- [Stripe webhooks](https://docs.stripe.com/webhooks), [GitHub webhooks](https://docs.github.com/en/webhooks), [Slack Events API](https://docs.slack.dev/apis/events-api/), [Shopify webhooks](https://shopify.dev/docs/apps/build/webhooks), [Standard Webhooks spec](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md).

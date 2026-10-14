@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploy a Webhook Receiver: Always-On URL, Signatures, Retries, Cold Starts</title>
+<meta name="description" content="A webhook URL has to answer whenever the provider calls. What a production receiver needs, a complete example with a Dockerfile, how cold starts meet provider deadlines, and how to deploy it in one sentence.">
+<link rel="canonical" href="https://whatiswebhook.com/deploy-webhook-receiver.html">
+<meta name="theme-color" content="#f5f8fd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#061633" media="(prefers-color-scheme: dark)">
+<script src="/theme.js"></script>
+<link rel="preload" href="/fonts/space-grotesk-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-sans-vf.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=1.0.0">
+<link rel="stylesheet" href="/webhook.css?v=1.0.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="whatiswebhook.com">
+<meta property="og:title" content="Deploy a webhook receiver">
+<meta property="og:description" content="A tunnel lives as long as your laptop is awake. What a production webhook receiver needs, and how to give it a URL that's always on.">
+<meta property="og:url" content="https://whatiswebhook.com/deploy-webhook-receiver.html">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "@id": "https://whatiswebhook.com/deploy-webhook-receiver.html#article",
+      "headline": "Deploy a webhook receiver",
+      "description": "What a production webhook receiver needs (a stable public HTTPS URL, fast answers, signature checks, idempotency, secrets), a complete example with a Dockerfile, and how to deploy it.",
+      "url": "https://whatiswebhook.com/deploy-webhook-receiver.html",
+      "datePublished": "2026-10-14",
+      "dateModified": "2026-10-14",
+      "inLanguage": "en",
+      "isPartOf": { "@type": "WebSite", "name": "whatiswebhook.com", "url": "https://whatiswebhook.com/" },
+      "about": [
+        { "@type": "Thing", "name": "Webhook" },
+        { "@type": "Thing", "name": "Software deployment" }
+      ]
+    },
+    {
+      "@type": "HowTo",
+      "@id": "https://whatiswebhook.com/deploy-webhook-receiver.html#howto",
+      "name": "Deploy a webhook receiver",
+      "step": [
+        { "@type": "HowToStep", "name": "Write the receiver", "text": "Verify the signature over the raw body, answer 200 right away, skip delivery IDs you've already handled, then do the work." },
+        { "@type": "HowToStep", "name": "Add a Dockerfile", "text": "Package the receiver so any container host can build and run it on one port." },
+        { "@type": "HowToStep", "name": "Deploy it", "text": "Ask a coding agent to deploy it, or build and run it on a host with a public HTTPS URL." },
+        { "@type": "HowToStep", "name": "Store the signing secret", "text": "Set the provider's signing secret as an encrypted secret on the host, never in the code." },
+        { "@type": "HowToStep", "name": "Register the URL", "text": "Paste the permanent HTTPS URL into the provider's webhook settings and send a test event." }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://whatiswebhook.com/deploy-webhook-receiver.html#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Where should I host a webhook receiver?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Anywhere that gives it a stable public HTTPS URL and answers within the provider's deadline: a container host, a serverless function, or your own server. Not a laptop: a tunnel only works while it's awake." }
+        },
+        {
+          "@type": "Question",
+          "name": "Can a webhook receiver sleep when idle?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes, if it wakes up faster than the provider's deadline: 3 seconds for Slack, 5 for Shopify, 10 for GitHub. If it can't, keep it always on. Providers that retry, like Stripe and Shopify, will resend a delivery missed during a slow start; GitHub won't." }
+        },
+        {
+          "@type": "Question",
+          "name": "Is a serverless function good for webhooks?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Often, yes: it's always reachable and short requests are what it's built for. Make sure you can read the raw request body for signature checks, and move slow work to a queue or background job, since the function should answer within seconds." }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I avoid processing the same webhook twice?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Store each event or delivery ID when you handle it, for example in a database column with a unique constraint, and skip IDs you've seen. Retries and redeliveries reuse the same ID." }
+        },
+        {
+          "@type": "Question",
+          "name": "Where do I keep the webhook signing secret?",
+          "acceptedAnswer": { "@type": "Answer", "text": "In the host's encrypted secrets or environment settings, read at startup. Never commit it to the repository or bake it into the image." }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--stroke-2);stroke-width:1"/></pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" style="fill:var(--stroke)"/></marker>
+  </defs>
+</svg>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap masthead-inner">
+    <a class="logo" href="/" aria-label="whatiswebhook.com home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><g class="logo-loop"><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg>
+      <span class="logo-text">whatis<b>webhook</b></span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Chapters">
+      <a href="/"><span class="n">01</span>Webhooks</a>
+      <a href="/test-webhook-locally.html"><span class="n">02</span>Test locally</a>
+      <a href="/webhook-not-working.html"><span class="n">03</span>Troubleshoot</a>
+      <a href="/verify-webhook-signatures.html"><span class="n">04</span>Signatures</a>
+      <a href="/deploy-webhook-receiver.html" aria-current="page"><span class="n">05</span>Deploy</a>
+    </nav>
+    <div class="masthead-actions">
+      <button class="theme-toggle" type="button" aria-pressed="false" aria-label="Switch to dark blueprint theme"><span class="knob" aria-hidden="true"></span><svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7L7 17M17 7l1.7-1.7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/webhook-tester.html">Webhook tester</a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="bars" aria-hidden="true"></span>Menu</button>
+    </div>
+  </div>
+  <div class="progress" aria-hidden="true"><span></span></div>
+</header>
+
+<main id="main">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="kicker"><span class="tag">CH. 05</span> A field guide · from your laptop to always on</p>
+      <h1>Deploy a webhook <span class="hl">receiver</span></h1>
+      <p class="lede">Providers send webhooks at 3 a.m., on weekends, and while your laptop is closed. A receiver that's meant to keep working needs a home that's always reachable, at a URL that never changes. Here's what that home has to provide, a complete receiver to start from, and how to put it online.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#go-live">Deploy one now <span class="arr" aria-hidden="true">↓</span></a>
+        <a class="btn" href="#checklist">What a receiver needs</a>
+      </div>
+      <dl class="readouts">
+        <div><dt>Laptop awake</dt><dd>~8 <small>h a day</small></dd></div>
+        <div><dt>Provider sends</dt><dd>24 <small>h a day</small></dd></div>
+        <div><dt>URL changes</dt><dd>Never</dd></div>
+      </dl>
+    </div>
+
+    <figure class="fig hero-fig corners" data-crosshair>
+      <div class="fig-bar"><span><b>Fig. 01</b> — one day of webhooks</span><span class="live">Live</span></div>
+      <svg class="dg anim" viewBox="0 0 600 400" role="img" aria-labelledby="f1t f1d">
+        <title id="f1t">One day of webhook deliveries, to a laptop tunnel and to a deployed receiver</title>
+        <desc id="f1d">A 24-hour timeline with eleven webhook events spread across the day. In the top row, a tunnel to a laptop is only up during working hours, so the events at night and in the evening fail. In the bottom row, a deployed receiver is up all day, and every event is delivered.</desc>
+        <!-- axis -->
+        <g class="tx-3">
+          <text x="40" y="44">00:00</text><text x="160" y="44">06:00</text><text class="mid" x="300" y="44">12:00</text><text x="410" y="44">18:00</text><text class="end" x="560" y="44">24:00</text>
+        </g>
+        <path class="ln-3" d="M40 54 H560 M40 50 V58 M170 50 V58 M300 50 V58 M430 50 V58 M560 50 V58"/>
+
+        <!-- row A: tunnel -->
+        <text class="lbl" x="40" y="92">A · TUNNEL TO YOUR LAPTOP</text>
+        <rect class="f-hatch" x="40" y="106" width="520" height="40" rx="6"/>
+        <rect class="ln-3" x="40" y="106" width="520" height="40" rx="6"/>
+        <rect class="bg-blue" x="235" y="106" width="65" height="40"/>
+        <rect class="bg-blue" x="321" y="106" width="109" height="40"/>
+        <text class="tx-3" x="241" y="164">LAPTOP AWAKE 09–12 · 13–18</text>
+        <!-- events: x = 40 + h*21.67 -->
+        <g>
+          <g class="f-err"><circle cx="66" cy="126" r="5"/><circle cx="131" cy="126" r="5"/><circle cx="196" cy="126" r="5"/><circle cx="310" cy="126" r="5"/><circle cx="462" cy="126" r="5"/><circle cx="516" cy="126" r="5"/></g>
+          <g class="f-ok"><circle cx="252" cy="126" r="5"/><circle cx="283" cy="126" r="5"/><circle cx="348" cy="126" r="5"/><circle cx="392" cy="126" r="5"/><circle cx="420" cy="126" r="5"/></g>
+        </g>
+        <text class="lbl-err" x="40" y="190">6 OF 11 FAIL · RETRIED, THEN LOST</text>
+
+        <path class="ln-3" d="M20 216 H580"/>
+
+        <!-- row B: deployed -->
+        <text class="lbl-ok" x="40" y="252">B · DEPLOYED RECEIVER</text>
+        <rect class="bg-blue" x="40" y="266" width="520" height="40" rx="6"/>
+        <rect class="ln" x="40" y="266" width="520" height="40" rx="6"/>
+        <g class="f-ok"><circle cx="66" cy="286" r="5"/><circle cx="131" cy="286" r="5"/><circle cx="196" cy="286" r="5"/><circle cx="252" cy="286" r="5"/><circle cx="283" cy="286" r="5"/><circle cx="310" cy="286" r="5"/><circle cx="348" cy="286" r="5"/><circle cx="392" cy="286" r="5"/><circle cx="420" cy="286" r="5"/><circle cx="462" cy="286" r="5"/><circle cx="516" cy="286" r="5"/></g>
+        <text class="tx-3" x="40" y="324">UP 24 H · SAME URL SINCE THE DAY IT WAS REGISTERED</text>
+        <text class="lbl-ok" x="40" y="350">11 OF 11 DELIVERED</text>
+        <g class="pkt"><circle class="pkt-halo" r="10"/><circle class="pkt-core" r="4.6"/>
+          <animateMotion dur="8s" repeatCount="indefinite" path="M40 286 H560"/>
+        </g>
+      </svg>
+      <figcaption>Eleven events in one day. Through a tunnel (A), every event that lands while the laptop sleeps fails. Some providers retry for hours or days, but GitHub doesn't retry at all. A deployed receiver (B) takes them all.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ QUICK ANSWER ============ -->
+<section class="section section-tight" id="quick-answer" aria-labelledby="qa-h">
+  <div class="wrap split split-wide">
+    <div class="reveal">
+      <p class="eyebrow"><span class="idx">§ 01</span> The short answer</p>
+      <h2 id="qa-h">Deploying a receiver, in one paragraph</h2>
+      <div class="answer">
+        <span class="answer-label">Quick answer</span>
+        <p>Run your handler on a host that gives it a <strong>public HTTPS URL that never changes</strong> and answers within the provider's deadline, then register that URL once. A container host, a serverless function or your own server all work. What matters is that it's reachable around the clock, keeps the signing secret out of your code, and answers <code>2xx</code> fast even right after a quiet night.</p>
+        <p>With a coding agent, it's one sentence. Then paste the URL into the provider's settings and send a test event.</p>
+        <div class="cmd"><span class="p">$</span><code>claude "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+      </div>
+    </div>
+    <div class="reveal reveal-d1">
+      <p class="eyebrow"><span class="idx">Spec sheet</span> What the host must give</p>
+      <dl class="facts">
+        <dt>URL</dt><dd>Public, HTTPS, stable for months</dd>
+        <dt>Answer time</dt><dd>Under the deadline: Slack 3 s, Shopify 5 s, GitHub 10 s</dd>
+        <dt>Availability</dt><dd>24 hours a day, or a wake-up faster than the deadline</dd>
+        <dt>Secrets</dt><dd>Encrypted, injected as environment variables</dd>
+        <dt>Body size</dt><dd>Proxy limits above your largest payload</dd>
+        <dt>Logs</dt><dd>Enough to trace an event ID end to end</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHECKLIST ============ -->
+<section class="section section-rule" id="checklist" aria-labelledby="ck-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 02</span> Before it goes live</p>
+      <h2 id="ck-h">Six things a production receiver does</h2>
+      <p>None of them is hard. Skipping any of them is how a receiver works in the demo and fails in the third week.</p>
+    </div>
+    <div class="cards cards-3">
+      <article class="card reveal"><span class="card-idx">01 · Trust</span><h3>Checks the signature</h3><p>Over the raw bytes, with a constant-time comparison, and rejects old timestamps. Everything else about a request can be forged. <a href="/verify-webhook-signatures.html">How →</a></p></article>
+      <article class="card reveal reveal-d1"><span class="card-idx">02 · Speed</span><h3>Answers first, works after</h3><p>Return <code>200</code> as soon as the signature checks out, then send emails or call APIs in the background or from a queue.</p></article>
+      <article class="card reveal"><span class="card-idx">03 · Duplicates</span><h3>Does each event once</h3><p>Retries and redeliveries reuse the event's ID. Store IDs with a unique constraint and skip the ones you've seen.</p></article>
+      <article class="card reveal reveal-d1"><span class="card-idx">04 · Order</span><h3>Doesn't trust the order</h3><p>Events can arrive out of order. Compare timestamps or fetch the current state from the provider's API before acting.</p></article>
+      <article class="card reveal"><span class="card-idx">05 · Secrets</span><h3>Keeps the secret out of the code</h3><p>The signing secret lives in the host's encrypted settings, read from the environment. Rotate it if it ever leaks.</p></article>
+      <article class="card reveal reveal-d1"><span class="card-idx">06 · Recovery</span><h3>Can catch up</h3><p>Log each event's ID and type. After an outage, redeliver from the provider's log or sweep its API. <a href="/webhook-not-working.html">Reading delivery logs →</a></p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CODE ============ -->
+<section class="section section-rule" id="example" aria-labelledby="code-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 03</span> A complete receiver</p>
+      <h2 id="code-h">Forty lines and a Dockerfile</h2>
+      <p>A GitHub receiver with no dependencies, so you can read every line. Swap the signature check for <a href="/verify-webhook-signatures.html">your provider's</a>; the shape stays the same.</p>
+    </div>
+    <div class="code"><div class="code-head"><span>server.mjs</span></div><pre><code>import http from "node:http";
+import crypto from "node:crypto";
+
+const SECRET = process.env.GITHUB_WEBHOOK_SECRET;    <span class="c">// set on the host, never in git</span>
+const seen = new Set();   <span class="c">// in production: a database column with a unique constraint</span>
+
+function verified(body, header = "") {
+  const expected = "sha256=" + crypto.createHmac("sha256", SECRET).update(body).digest("hex");
+  return header.length === expected.length &amp;&amp;
+    crypto.timingSafeEqual(Buffer.from(header), Buffer.from(expected));
+}
+
+function handle(event, payload) {
+  console.log(event, payload.repository?.full_name);  <span class="c">// your work goes here</span>
+}
+
+http.createServer((req, res) =&gt; {
+  if (req.method !== "POST" || req.url !== "/webhook") return res.writeHead(404).end();
+  const chunks = [];
+  req.on("data", (c) =&gt; chunks.push(c));
+  req.on("end", () =&gt; {
+    const body = Buffer.concat(chunks);                <span class="c">// the raw bytes</span>
+    if (!verified(body, req.headers["x-hub-signature-256"])) {
+      return res.writeHead(401).end("bad signature");
+    }
+    res.writeHead(200).end("ok");                      <span class="c">// answer first…</span>
+    const id = req.headers["x-github-delivery"];       <span class="c">// same ID on redelivery</span>
+    if (seen.has(id)) return;
+    seen.add(id);
+    handle(req.headers["x-github-event"], JSON.parse(body));  <span class="c">// …then work</span>
+  });
+}).listen(process.env.PORT || 8080, "0.0.0.0");</code></pre></div>
+    <div class="code"><div class="code-head"><span>Dockerfile</span></div><pre><code>FROM node:22-alpine
+WORKDIR /app
+COPY server.mjs .
+ENV PORT=8080
+EXPOSE 8080
+USER node
+CMD ["node", "server.mjs"]</code></pre></div>
+    <p>It listens on <code>0.0.0.0</code>, not <code>127.0.0.1</code>, so the host's proxy can reach it inside the container (<a href="https://whatislocalhost.com/" rel="noopener">why that matters</a>), and it reads the port from the environment.</p>
+  </div>
+</section>
+
+<!-- ============ DEPLOY BY HAND ============ -->
+<section class="section section-rule" id="by-hand" aria-labelledby="bh-h">
+  <div class="wrap split split-wide">
+    <div class="reveal">
+      <p class="eyebrow"><span class="idx">§ 04</span> Deploy it</p>
+      <h2 id="bh-h">The commands, if you'd rather type them</h2>
+      <p>This is what a coding agent runs on <a href="https://cloudish.ai/" rel="noopener">Cloudish</a>, the host this site runs on: no account to create, a prepaid API key, and the build happens on the server. Any container host works with the same Dockerfile.</p>
+      <div class="code"><div class="code-head"><span>Terminal · deploy the receiver</span></div><pre><code><span class="c"># 1. Get an API key (no signup). Save "key" as CLOUDISH_API_KEY</span>
+curl -X POST https://cloudish.ai/api/v1/keys
+
+<span class="c"># 2. Upload the folder; Cloudish builds the Dockerfile and runs it</span>
+tar --exclude='.env*' --exclude='.git' -czf context.tar.gz .
+curl -X POST https://cloudish.ai/api/v1/projects \
+  -H "Authorization: Bearer $CLOUDISH_API_KEY" \
+  -F "name=github-hooks" -F "port=8080" -F "context=@context.tar.gz"
+
+<span class="c"># 3. Store the signing secret, encrypted (YOUR_ALIAS comes from step 1)</span>
+curl -X PUT https://cloudish.ai/api/v1/projects/YOUR_ALIAS/github-hooks/secrets \
+  -H "Authorization: Bearer $CLOUDISH_API_KEY" -H "content-type: application/json" \
+  -d '{"name": "GITHUB_WEBHOOK_SECRET", "value": "…"}'</code></pre></div>
+      <p>The deploy response carries the app's permanent HTTPS URL. Register <code>&lt;url&gt;/webhook</code> in the repository's webhook settings with the same secret, and GitHub's <code>ping</code> event should come back <code>200</code>. The full API, including your own domain: <a href="https://cloudish.ai/skill.md" rel="noopener">cloudish.ai/skill.md</a>.</p>
+    </div>
+    <div class="reveal reveal-d1">
+      <p class="eyebrow"><span class="idx">Note</span> Sleeping apps and deadlines</p>
+      <div class="note warn"><span class="note-label">Cold starts</span>Many hosts, Cloudish included, put an idle app to sleep and start it on the next request. That first request waits for the start. If that can take longer than the provider's deadline (Slack's is 3 seconds), the delivery fails. Stripe, Shopify and Slack retry, and the retry finds the app awake; GitHub doesn't retry. <a href="/webhook-not-working.html#timeouts">Timeouts in detail →</a></div>
+      <p>For a receiver that must catch every first delivery, keep it awake. On Cloudish that's a per-key setting, billed around the clock:</p>
+      <div class="code"><div class="code-head"><span>Terminal · never sleep</span></div><pre><code>curl -X PATCH https://cloudish.ai/api/v1/me \
+  -H "Authorization: Bearer $CLOUDISH_API_KEY" -H "content-type: application/json" \
+  -d '{"settings": {"idleTimeoutSeconds": 0}}'</code></pre></div>
+      <p class="muted">Serverless functions are a good fit too: always reachable, made for short requests. Check that you can read the raw body for signatures, and move long work to a queue.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GO LIVE ============ -->
+<section class="section section-rule" id="go-live" aria-labelledby="lp-h">
+  <div class="wrap">
+    <div class="launchpad reveal" data-launchpad data-tpl="Build me a webhook receiver for {idea}. It should verify the provider's signature over the raw request body, reject requests older than five minutes, answer 200 quickly and do the work after, and ignore duplicate event IDs. Add a Dockerfile, deploy it to cloudish.ai using the instructions at https://cloudish.ai/skill.md, and send me the live URL to paste into the provider. If you can't run commands yourself, give me the exact steps to run in my terminal.">
+      <div class="lp-head">
+        <div>
+          <p class="eyebrow"><span class="idx">§ 05</span> One sentence</p>
+          <h2 id="lp-h">Your receiver, online,<br>at a URL that stays.</h2>
+        </div>
+        <span class="badge">One sentence · no dashboard</span>
+      </div>
+      <div class="lp-grid">
+        <div class="lp-card">
+          <span class="lp-step"><i>A</i> Already have a handler?</span>
+          <h3>Ask your coding agent</h3>
+          <p>Open a terminal in your project folder and paste one of these. The agent adds a Dockerfile if there isn't one, deploys, stores the secret, and hands you back the URL to register.</p>
+          <div class="cmd"><span class="p">$</span><code>claude "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <div class="cmd"><span class="p">$</span><code>codex "Deploy this webhook handler to cloudish.ai and give me the live URL. Instructions: https://cloudish.ai/skill.md"</code></div>
+          <p class="fineprint">Works with Claude Code, Codex, and other coding agents that can run commands.</p>
+        </div>
+        <div class="lp-card">
+          <span class="lp-step"><i>B</i> Starting from zero?</span>
+          <h3>Have one built and deployed</h3>
+          <label class="visually-hidden" for="idea-deploy">Which webhooks should it receive?</label>
+          <input class="field" id="idea-deploy" data-idea type="text" placeholder="Stripe payment events that email me each new sale" autocomplete="off">
+          <div class="chips" style="margin:10px 0 4px">
+            <button type="button" class="chip" data-idea-chip="GitHub push events that post a summary to a Discord channel" aria-pressed="false">GitHub → Discord</button>
+            <button type="button" class="chip" data-idea-chip="Shopify orders that append a row to a Google Sheet" aria-pressed="false">Shopify → Sheet</button>
+            <button type="button" class="chip" data-idea-chip="Stripe subscription events that update a small Postgres table" aria-pressed="false">Stripe → database</button>
+          </div>
+          <div class="ai-buttons">
+            <a class="ai-btn" data-ai="chatgpt" href="https://chatgpt.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true">G</span><span>ChatGPT<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="claude" href="https://claude.ai/new" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#c2410c">C</span><span>Claude<small>Open with prompt</small></span></a>
+            <a class="ai-btn" data-ai="grok" href="https://grok.com/" target="_blank" rel="noopener"><span class="mono-ico" aria-hidden="true" style="background:#334155">X</span><span>Grok<small>Open with prompt</small></span></a>
+          </div>
+          <p class="fineprint">Chat assistants deploy for you when they can run code with internet access; otherwise they'll give you the exact commands.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="section section-rule" id="faq" aria-labelledby="faq-h">
+  <div class="wrap-narrow">
+    <div class="section-head reveal">
+      <p class="eyebrow"><span class="idx">§ 06</span> FAQ</p>
+      <h2 id="faq-h">Frequently asked questions</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>Where should I host a webhook receiver?</summary>
+        <div class="faq-a"><p>Anywhere that gives it a stable public HTTPS URL and answers within the provider's deadline: a container host, a serverless function, or your own server. Not a laptop: a tunnel only works while it's awake.</p></div>
+      </details>
+      <details>
+        <summary>Can a webhook receiver sleep when idle?</summary>
+        <div class="faq-a"><p>Yes, if it wakes up faster than the provider's deadline: 3 seconds for Slack, 5 for Shopify, 10 for GitHub. If it can't, keep it always on. Providers that retry, like Stripe and Shopify, will resend a delivery missed during a slow start; GitHub won't.</p></div>
+      </details>
+      <details>
+        <summary>Is a serverless function good for webhooks?</summary>
+        <div class="faq-a"><p>Often, yes: it's always reachable and short requests are what it's built for. Make sure you can read the raw request body for signature checks, and move slow work to a queue or background job, since the function should answer within seconds.</p></div>
+      </details>
+      <details>
+        <summary>How do I avoid processing the same webhook twice?</summary>
+        <div class="faq-a"><p>Store each event or delivery ID when you handle it, for example in a database column with a unique constraint, and skip IDs you've seen. Retries and redeliveries reuse the same ID.</p></div>
+      </details>
+      <details>
+        <summary>Where do I keep the webhook signing secret?</summary>
+        <div class="faq-a"><p>In the host's encrypted secrets or environment settings, read at startup. Never commit it to the repository or bake it into the image.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="section-tight" aria-label="Next">
+  <div class="wrap">
+    <a class="next-chapter reveal" href="/webhook-tester.html">
+      <span><small>Then · Tool</small><strong>Point the provider at your new URL</strong><span class="sub">Or at the webhook tester first, to see exactly what it sends before your receiver does.</span></span>
+      <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="7.6" r="2.7" fill="#ff8a3d"/></svg><span class="logo-text">whatis<b>webhook</b></span></a>
+        <p>A visual field guide to webhooks: what they are, how to test them, why they fail, and where they should live.</p>
+      </div>
+      <div class="footer-col"><h2>Chapters</h2><ul>
+        <li><a href="/">01 · What is a webhook?</a></li>
+        <li><a href="/test-webhook-locally.html">02 · Test a webhook locally</a></li>
+        <li><a href="/webhook-not-working.html">03 · Webhook not working</a></li>
+        <li><a href="/verify-webhook-signatures.html">04 · Verify signatures</a></li>
+        <li><a href="/deploy-webhook-receiver.html">05 · Deploy a receiver</a></li>
+        <li><a href="/webhook-tester.html">Tool · Webhook tester</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>Primary sources</h2><ul>
+        <li><a href="https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks" rel="noopener">GitHub · webhook best practices</a></li>
+        <li><a href="https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries" rel="noopener">GitHub · validating deliveries</a></li>
+        <li><a href="https://docs.stripe.com/webhooks" rel="noopener">Stripe · webhooks</a></li>
+        <li><a href="https://shopify.dev/docs/apps/build/webhooks/subscribe/https" rel="noopener">Shopify · HTTPS webhooks</a></li>
+        <li><a href="https://cloudish.ai/skill.md" rel="noopener">Cloudish · deploy API</a></li>
+      </ul></div>
+      <div class="footer-col"><h2>For machines</h2><ul>
+        <li><a href="/llms.txt">llms.txt</a></li>
+        <li><a href="/sitemap.xml">sitemap.xml</a></li>
+        <li><a href="https://cloudish.ai/skill.md" rel="noopener">Cloudish deploy skill</a></li>
+      </ul></div>
+    </div>
+    <div class="titleblock">
+      <div><span>Project</span><strong>What is a webhook? A field guide</strong></div>
+      <div><span>Sheet</span><strong>05 of 05</strong></div>
+      <div><span>Drawing</span><strong>Deploy</strong></div>
+      <div><span>Rev</span><strong>1.0.0</strong></div>
+      <div><span>Scale</span><strong>24 h : 24 h</strong></div>
+      <div><span>Deployed on</span><strong><a href="https://cloudish.ai/" rel="noopener">Cloudish.ai</a> — not a laptop</strong></div>
+    </div>
+    <div class="footer-legal"><span>© 2026 whatiswebhook.com</span><span>Drawn in blueprint blue. Every request answered from a data center.</span></div>
+  </div>
+</footer>
+<script src="/script.js?v=1.0.0" defer></script>
+</body>
+</html>

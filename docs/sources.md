@@ -155,3 +155,92 @@ on the site; free plans and limits change.
   `limit` "100kb" (https://expressjs.com/en/5x/api/express/); nginx
   `client_max_body_size` default 1m, returns 413
   (https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size).
+
+## Added for Chapter 04
+
+Checked on 2026-10-14 for /verify-webhook-signatures.html.
+
+- **Stripe, manual verification**: split `Stripe-Signature` on `,` then `=`;
+  keep `t` and every `v1`, ignore other schemes (test events add a fake
+  `v0`). Signed payload is `{t}.{body}`, HMAC-SHA256 with the endpoint
+  secret, constant-time compare against each `v1`. Rolling a secret can keep
+  the old one active up to 24 h; Stripe sends one signature per active
+  secret. Don't use tolerance 0: it disables the recency check. Use NTP.
+  Each endpoint has its own secret, and test and live differ. HTTPS is
+  required in live mode; TLS 1.2 and 1.3 only.
+  https://docs.stripe.com/webhooks
+- **Stripe, signature errors**: most common cause is the wrong secret (CLI
+  vs Dashboard); frameworks that reorder keys, strip whitespace or change
+  encoding break it; mount `express.json()` after the webhook route; API
+  Gateway needs a body mapping template for the raw body. Error text: "No
+  signatures found matching the expected signature for payload".
+  https://docs.stripe.com/events/manage-webhook-endpoints#signature-errors
+- **stripe-node**: `constructEvent(payload, header, secret, tolerance?)`,
+  default tolerance 300 s, payload must be a string or Uint8Array/Buffer
+  ("Payload was provided as a parsed JavaScript object instead"), adds a note
+  when the secret contains whitespace, and tells forwarding tools to keep
+  "the exact request body, including JSON formatting and new line style".
+  The whole `whsec_…` string is the HMAC key.
+  https://github.com/stripe/stripe-node/blob/master/src/Webhooks.ts
+- **stripe-python**: `stripe.Webhook.construct_event(payload, sig_header,
+  secret, tolerance=300)`; raises `SignatureVerificationError`, exported as
+  `stripe.SignatureVerificationError` and via `stripe.error`; key is
+  `secret.encode("utf-8")`.
+  https://github.com/stripe/stripe-python/blob/master/stripe/_webhook.py
+- **GitHub**: `X-Hub-Signature-256: sha256=<hex>` of the body with the
+  webhook secret; header absent without a secret; handle payload as UTF-8;
+  never use `==`. Test values: secret `It's a Secret to Everybody`, payload
+  `Hello, World!` → `757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17`
+  (reproduced with Node and openssl). Proxies and load balancers must not
+  modify payload or headers.
+  https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries
+  Payloads are capped at 25 MB.
+  https://docs.github.com/en/webhooks/webhook-events-and-payloads
+  Use HTTPS, leave SSL verification on; `X-GitHub-Delivery` against replays
+  (same value on redelivery).
+  https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks
+- **Slack**: signing secret is in the app admin panel under Basic Info; base
+  string `v0:{timestamp}:{raw body}`; hex digest prefixed `v0=`; reject
+  timestamps more than five minutes from local time; use an HMAC compare
+  function. Doc example (secret `8f742231b10e8888abcd99yyyzzz85a5`, ts
+  `1531420618`) gives `v0=a2114d57b48eac39b9ad189dd8316235a7b4a8d21a10bd27519666489c69b503`
+  (reproduced with Node).
+  https://docs.slack.dev/authentication/verifying-requests-from-slack
+- **Shopify**: page moved to verify-deliveries. Base64 HMAC-SHA256 of the
+  raw body with the app's client secret; after rotating the client secret
+  it can take up to an hour before the new one is used; dedupe with
+  `X-Shopify-Webhook-Id`. `X-Shopify-Triggered-At` exists but the HMAC
+  covers the body only.
+  https://shopify.dev/docs/apps/build/webhooks/verify-deliveries
+  https://shopify.dev/docs/apps/build/webhooks/delivery-structure
+- **Standard Webhooks**: signed content `msg_id.timestamp.payload`; header is
+  a space-delimited list for zero-downtime rotation; symmetric secrets are
+  24 to 64 random bytes, base64, prefixed `whsec_`; constant-time compare.
+  https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md
+  Reference libraries (`standardwebhooks` on npm and PyPI) strip `whsec_`,
+  base64-decode, reject timestamps more than 5 min too old or too new. Test
+  vector: secret `MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw`, id
+  `msg_p5jXN8AQM9LWM0D4loKWxJek`, ts `1614265330`, body `{"test": 2432232314}`
+  → `v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=`.
+  https://github.com/standard-webhooks/standard-webhooks/tree/main/libraries
+- **Node `crypto.timingSafeEqual(a, b)`**: constant time; throws if the byte
+  lengths differ (`ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH`).
+  https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b
+- **Python `hmac`**: `digestmod` is required (3.8+); `compare_digest` takes
+  two bytes-like objects or two ASCII-only `str` (non-ASCII raises
+  `TypeError`); docs warn against `==` on `hexdigest()`.
+  https://docs.python.org/3/library/hmac.html
+- **Express `express.raw()`**: body as a Buffer; `req.body` is `undefined`
+  when there's no body, the type doesn't match, or on error (Express 5);
+  default type `application/octet-stream`, default limit `100kb`.
+  https://expressjs.com/en/5x/api/express/
+- **Flask `request.get_data()`**: returns the buffered body as bytes; returns
+  nothing if form data was already parsed.
+  https://flask.palletsprojects.com/en/stable/api/
+- **curl `-d @file`**: strips carriage returns, newlines and null bytes from
+  the file; use `--data-binary` for exact bytes.
+  https://curl.se/docs/manpage.html#-d
+- **JSON round trips** (run locally, Node 22 and Python 3): raw
+  `{"b":1, "2":true, "url":"https:\/\/x.io", "n":1.0, "name":"Zoë"}` →
+  Node `{"2":true,"b":1,"url":"https://x.io","n":1,"name":"Zoë"}`, Python
+  `{"b": 1, "2": true, "url": "https://x.io", "n": 1.0, "name": "Zo\u00eb"}`.
