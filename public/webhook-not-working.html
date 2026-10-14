@@ -6,14 +6,13 @@
 <title>Webhook Not Working? Fix Failed, Missing &amp; Timed-Out Webhooks (Stripe, GitHub, Shopify, Slack)</title>
 <meta name="description" content="Webhook not received, or failing with a timeout, 401, 403, 404, 500 or TLS error? Where Stripe, GitHub, Shopify and Slack log each delivery, what every status means, and how to fix it.">
 <link rel="canonical" href="https://whatiswebhook.com/webhook-not-working.html">
-<meta name="theme-color" content="#f5f8fd" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#061633" media="(prefers-color-scheme: dark)">
-<script src="/theme.js"></script>
+<meta name="theme-color" content="#fbfaf3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f161c" media="(prefers-color-scheme: dark)">
+<script src="/theme.js?v=3"></script>
 <link rel="preload" href="/fonts/space-grotesk-vf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/ibm-plex-sans-vf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css?v=1.0.0">
-<link rel="stylesheet" href="/webhook.css?v=1.0.0">
-<link rel="stylesheet" href="/palettes.css?v=1">
+<link rel="stylesheet" href="/webhook.css?v=1.1.0">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="whatiswebhook.com">
@@ -100,7 +99,7 @@
 <header class="masthead">
   <div class="wrap masthead-inner">
     <a class="logo" href="/" aria-label="whatiswebhook.com home">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><g class="logo-loop"><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="20.5" cy="7.6" r="2.7" style="fill:var(--signal)"/></svg>
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--logo-bg)"/><path d="M1 16h30M16 1v30" style="stroke:var(--logo-ink)" stroke-opacity=".1"/><g class="logo-loop"><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" style="stroke:var(--logo-ink)" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" style="stroke:var(--logo-ink)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="20.5" cy="7.6" r="2.7" style="fill:var(--logo-dot)"/></svg>
       <span class="logo-text">whatis<b>webhook</b></span>
     </a>
     <nav class="nav" id="site-nav" aria-label="Chapters">
@@ -585,7 +584,7 @@ curl -s -o /dev/null -X POST https://hooks.example.com/webhook \
   <div class="wrap">
     <div class="footer-top">
       <div class="footer-brand">
-        <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--blue)"/><path d="M1 16h30M16 1v30" stroke="#fff" stroke-opacity=".14"/><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="7.6" r="2.7" style="fill:var(--signal)"/></svg><span class="logo-text">whatis<b>webhook</b></span></a>
+        <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" style="fill:var(--logo-bg)"/><path d="M1 16h30M16 1v30" style="stroke:var(--logo-ink)" stroke-opacity=".1"/><path d="M20.5 9.5v8a5 5 0 0 1-10 0v-1.6" fill="none" style="stroke:var(--logo-ink)" stroke-width="2.3" stroke-linecap="round"/><path d="M8 18.3l2.5-2.8 2.5 2.8" fill="none" style="stroke:var(--logo-ink)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="7.6" r="2.7" style="fill:var(--logo-dot)"/></svg><span class="logo-text">whatis<b>webhook</b></span></a>
         <p>A visual field guide to webhooks: what they are, how to test them, why they fail, and where they should live.</p>
       </div>
       <div class="footer-col"><h2>Chapters</h2><ul>

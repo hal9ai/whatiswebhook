@@ -3,6 +3,44 @@
    (styles.css comes unchanged from whatislocalhost.com).
    ========================================================================== */
 
+/* ---------- Palette: citrine ----------
+   The series shares one blueprint system; each site has its own colors.
+   whatiswebhook: yellow up front, cyan linework, ink-dark text. */
+:root {
+  --paper: #fbfaf3; --paper-2: #f4f1e2; --surface: #ffffff; --surface-2: #fdfcf6; --fig-bg: rgba(255, 255, 255, .82);
+  --ink: #15212b; --ink-2: #3c4b57; --ink-3: #5c6b77;
+  --blue: #0a7c8f; --blue-hover: #086c7d; --fill: #ffd23f; --fill-hover: #ffc61a;
+  --blue-soft: #fff3bf; --blue-wash: rgba(255, 210, 63, .14); --link: #076a7a; --focus: #0a7c8f;
+  --stroke: #0d8fa3; --stroke-2: rgba(13, 143, 163, .45); --stroke-3: rgba(13, 143, 163, .2);
+  --rule: rgba(21, 33, 43, .12); --rule-strong: rgba(21, 33, 43, .24);
+  --grid-1: rgba(13, 143, 163, .045); --grid-2: rgba(13, 143, 163, .09);
+  --signal: #f2b600; --signal-ink: #8a6500; --signal-soft: rgba(255, 210, 63, .28);
+  --code-bg: #141d24; --code-border: rgba(255, 220, 120, .14); --code-ink: #f1efe4; --code-muted: #9aa3a8; --code-accent: #6fd8e6; --code-string: #ffd65c;
+  --code-inline-bg: rgba(255, 210, 63, .2);
+  --viz-context: #0d8fa3; --viz-live: #f2b600;
+  --on-fill: #15212b;
+  --logo-bg: #ffd23f; --logo-ink: #15212b; --logo-dot: #0d8fa3;
+}
+[data-theme="dark"] {
+  --paper: #0f161c; --paper-2: #131c23; --surface: #17222a; --surface-2: #1b2831; --fig-bg: rgba(23, 34, 42, .76);
+  --ink: #f6f3e6; --ink-2: #c9c6b6; --ink-3: #9d9b8d;
+  --blue: #ffd84f; --blue-hover: #ffe27a; --fill: #ffd23f; --fill-hover: #ffdc66;
+  --blue-soft: #3a3412; --blue-wash: rgba(255, 216, 79, .08); --link: #ffe07a;
+  --stroke: #79dceb; --stroke-2: rgba(121, 220, 235, .48); --stroke-3: rgba(121, 220, 235, .2);
+  --rule: rgba(246, 243, 230, .12); --rule-strong: rgba(246, 243, 230, .24);
+  --grid-1: rgba(121, 220, 235, .04); --grid-2: rgba(121, 220, 235, .075);
+  --signal: #ffd23f; --signal-ink: #ffe07a; --signal-soft: rgba(255, 210, 63, .18); --focus: #ffe07a;
+  --code-bg: #0a1014; --code-border: rgba(255, 220, 120, .14); --code-inline-bg: rgba(255, 216, 79, .1);
+  --viz-context: #4fc7d8; --viz-live: #ffd23f;
+  --on-fill: #15212b;
+  --logo-bg: #ffd23f; --logo-ink: #15212b; --logo-dot: #0d8fa3;
+}
+/* Text and marks drawn on the yellow fill. */
+::selection, .skip-link, .btn-primary, .kicker .tag, .answer-label, .next-chapter .go, .chip[aria-pressed="true"],
+.seg button[aria-pressed="true"], .sim-result .ico, .fix-head .n, .resp .you, .pg-lab b { color: var(--on-fill); }
+.btn-primary { --fg: var(--on-fill); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 10px 26px -14px #c99400; }
+
+
 .code .n { color: #b5f0c8; }
 
 /* ---------- Webhook tester ---------- */
