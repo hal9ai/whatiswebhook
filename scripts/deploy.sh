@@ -8,12 +8,11 @@
 #   curl -X POST https://cloudish.ai/api/v1/keys -H "content-type: application/json" \
 #     -d '{"alias": "whatiswebhook", "agent": "claude-code"}'
 #
-# The tester keeps its URLs in memory, so the app runs as one replica. Its
-# URLs expire after an hour without use anyway, so letting the app sleep
-# after an hour idle loses nothing (per-key setting, so it also applies to
-# other apps on the same key):
+# The tester keeps requests in memory, so the app runs as one replica. URLs
+# survive a sleep and the page keeps its own history, so a short idle timeout
+# is fine (per-key setting, so it also applies to other apps on the same key):
 #   curl -X PATCH https://cloudish.ai/api/v1/me -H "Authorization: Bearer $CLOUDISH_API_KEY" \
-#     -H "content-type: application/json" -d '{"settings": {"idleTimeoutSeconds": 3600}}'
+#     -H "content-type: application/json" -d '{"settings": {"idleTimeoutSeconds": 300}}'
 set -euo pipefail
 
 API=${CLOUDISH_API:-https://cloudish.ai}
@@ -34,19 +33,19 @@ path=$(echo "$resp" | json project.path)
 build=$(echo "$resp" | json build.id)
 echo "Project $path, build $build"
 
-shown=0
+seen=$(mktemp)
 while :; do
   b=$(curl -fsS "$API/api/v1/images/builds/$build" "${auth[@]}")
   status=$(echo "$b" | json build.status)
-  logs=$(echo "$b" | json build.logs)
-  total=$(printf '%s\n' "$logs" | wc -l)
-  [ "$total" -gt "$shown" ] && printf '%s\n' "$logs" | tail -n +"$((shown + 1))" && shown=$total
+  # build.logs is a rolling tail: print only lines not printed before.
+  echo "$b" | json build.logs | grep -vxF -f "$seen" | tee -a "$seen" || true
   case "$status" in
     succeeded) break ;;
-    failed) echo "Build failed: $(echo "$b" | json build.error)" >&2; exit 1 ;;
+    failed) echo "Build failed: $(echo "$b" | json build.error)" >&2; rm -f "$seen"; exit 1 ;;
   esac
   sleep 3
 done
+rm -f "$seen"
 
 # A readable URL instead of the random one; skipped quietly if the label is taken.
 url=$(curl -fsS -X PUT "$API/api/v1/projects/$path/subdomain" "${auth[@]}" \

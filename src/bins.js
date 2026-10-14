@@ -1,7 +1,8 @@
 // In-memory store for the webhook tester. A bin is a public URL that records
-// the requests sent to it. Nothing touches disk: bins live for an hour after
-// their last activity (24 hours at most), and vanish when the process
-// restarts or the app goes to sleep.
+// the requests sent to it. Nothing touches disk: a bin's requests are kept for
+// an hour after its last activity (24 hours at most), and vanish when the
+// process restarts or the app goes to sleep. The URL itself outlives that:
+// a well-formed ID the store has forgotten comes back as an empty bin.
 
 import { randomBytes } from 'node:crypto';
 
@@ -48,12 +49,12 @@ export class BinStore {
     this.bytes = 0;
   }
 
-  create() {
+  create(id = newId()) {
     this.sweep();
     while (this.bins.size >= this.limits.bins) this.evictOldest();
     const t = this.now();
     const bin = {
-      id: newId(),
+      id,
       createdAt: t,
       touchedAt: t,
       requests: [],
@@ -74,6 +75,12 @@ export class BinStore {
       return null;
     }
     return bin;
+  }
+
+  // The bin behind a well-formed ID, brought back empty if it was forgotten.
+  revive(id) {
+    if (!ID_PATTERN.test(id)) return null;
+    return this.get(id) ?? this.create(id);
   }
 
   touch(bin) {

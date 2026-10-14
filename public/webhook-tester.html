@@ -48,7 +48,7 @@
         {
           "@type": "Question",
           "name": "Who can see the requests sent to my webhook URL?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Anyone who has the URL. It is long and random, so it can't be guessed, but treat it like a password and don't send production data to it. Requests are kept in memory only, for an hour after the URL was last used, and are never written to disk." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Anyone who has the URL. It is long and random, so it can't be guessed, but treat it like a password and don't send production data to it. On the server, requests are kept in memory only, for at most an hour after the URL was last used, and never written to disk. Your browser keeps its own copy of the last 50." }
         },
         {
           "@type": "Question",
@@ -63,7 +63,7 @@
         {
           "@type": "Question",
           "name": "How long does a webhook URL last?",
-          "acceptedAnswer": { "@type": "Answer", "text": "An hour after it was last used, and at most 24 hours. It keeps the 50 most recent requests, up to 256 KiB of body each. For a URL that never changes, deploy your own receiver." }
+          "acceptedAnswer": { "@type": "Answer", "text": "The URL keeps working for as long as you use it. The server forgets its requests an hour after the last activity, or sooner when the app restarts; this page keeps the last 50 in your browser, with bodies up to 256 KiB. For a receiver that runs your own code, deploy one." }
         }
       ]
     }
@@ -211,7 +211,7 @@
         </div>
       </div>
 
-      <p class="wt-privacy"><strong>Anyone with this URL can see what's sent to it.</strong> It can't be guessed, but don't send production data. Requests stay in memory for an hour after the URL was last used, never on disk. The tester is open source.</p>
+      <p class="wt-privacy"><strong>Anyone with this URL can see what's sent to it.</strong> It can't be guessed, but don't send production data. The server keeps requests in memory for at most an hour after the URL's last use, never on disk; this page keeps the last 50 in your browser. The tester is open source.</p>
     </div>
   </div>
 </section>
@@ -291,7 +291,8 @@
       <p class="eyebrow"><span class="idx">Spec sheet</span> This tester</p>
       <dl class="facts">
         <dt>Cost</dt><dd>Free, no account</dd>
-        <dt>Kept for</dt><dd>1 hour after last use, 24 hours at most</dd>
+        <dt>URL lasts</dt><dd>As long as you use it</dd>
+        <dt>Requests kept</dt><dd>On the server, up to 1 hour after last use; the last 50 in your browser</dd>
         <dt>Stored</dt><dd>In memory only, never on disk</dd>
         <dt>Requests per URL</dt><dd>The 50 most recent</dd>
         <dt>Body size</dt><dd>Up to 256 KiB recorded, longer bodies are cut and flagged</dd>
@@ -355,7 +356,7 @@
     <div class="faq">
       <details open>
         <summary>Who can see the requests sent to my webhook URL?</summary>
-        <div class="faq-a"><p>Anyone who has the URL. It is long and random, so it can't be guessed, but treat it like a password and don't send production data to it. Requests are kept in memory only, for an hour after the URL was last used, and are never written to disk.</p></div>
+        <div class="faq-a"><p>Anyone who has the URL. It is long and random, so it can't be guessed, but treat it like a password and don't send production data to it. On the server, requests are kept in memory only, for at most an hour after the URL was last used, and never written to disk. Your browser keeps its own copy of the last 50.</p></div>
       </details>
       <details>
         <summary>Does the signing secret leave my browser?</summary>
@@ -367,7 +368,7 @@
       </details>
       <details>
         <summary>How long does a webhook URL last?</summary>
-        <div class="faq-a"><p>An hour after it was last used, and at most 24 hours. It keeps the 50 most recent requests, up to 256 KiB of body each. For a URL that never changes, <a href="/deploy-webhook-receiver.html">deploy your own receiver</a>.</p></div>
+        <div class="faq-a"><p>The URL keeps working for as long as you use it. The server forgets its requests an hour after the last activity, or sooner when the app restarts; this page keeps the last 50 in your browser, with bodies up to 256 KiB. For a receiver that runs your own code, <a href="/deploy-webhook-receiver.html">deploy one</a>.</p></div>
       </details>
     </div>
   </div>
@@ -421,6 +422,6 @@
   </div>
 </footer>
 <script src="/script.js?v=1.0.0" defer></script>
-<script src="/tester.js?v=1.0.0" defer></script>
+<script src="/tester.js?v=1.1.0" defer></script>
 </body>
 </html>

@@ -30,9 +30,9 @@ No framework and no build step.
 
 `POST /api/bins` returns a URL under `/in/<id>`. Every request sent there, any method and any path below it, is recorded: method, path, query, headers in their original order and case, and the exact body bytes (up to 256 KiB). `GET /api/bins/<id>/stream` pushes each one as a server-sent event. `PATCH /api/bins/<id>` sets the status and delay `/in/` answers with, to watch a provider retry. Slack's `url_verification` challenge is answered automatically.
 
-Nothing is written to disk. A bin lives for an hour after its last use (24 hours at most), keeps its 50 most recent requests, and takes at most 120 a minute. Signature checks run in the browser; secrets never reach the server.
+Nothing is written to disk. A bin's requests are kept for an hour after its last use (24 hours at most), up to its 50 most recent, and it takes at most 120 a minute. The URL outlives that: a well-formed ID the server has forgotten, after an hour or a restart, comes back as an empty bin, and the page keeps its own copy of the last 50 requests in the browser. Signature checks run in the browser; secrets never reach the server.
 
-Because bins live in memory, run a single instance. Letting the app sleep after an hour without requests is fine: by then every bin has expired anyway. A shorter idle timeout would drop live bins.
+Because bins live in memory, run a single instance. The app can sleep when idle (we use 5 minutes): URLs keep working after a wake-up, and the page still shows what it already received. Requests that arrive while no page is open and the app then sleeps are lost; the first request after a sleep waits for the app to start.
 
 ## Running locally
 

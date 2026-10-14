@@ -88,24 +88,39 @@ test('the response status can be set, to watch a provider retry', async () => {
   await close();
 });
 
-test('unknown and malformed bins answer 404, never a capture', async () => {
+test('malformed bin IDs answer 404, never a capture', async () => {
   const { base, close } = await start();
-  assert.equal((await fetch(`${base}/in/aaaaaaaaaaaaaaaa`, { method: 'POST' })).status, 404);
+  assert.equal((await fetch(`${base}/in/not-an-id`, { method: 'POST' })).status, 404);
   assert.equal((await fetch(`${base}/in/../../etc/passwd`)).status, 404);
   assert.equal((await fetch(`${base}/api/bins/nope`)).status, 404);
   await close();
 });
 
-test('bins expire after an hour without activity', async () => {
+test('requests are forgotten after an hour without activity, but the URL keeps working', async () => {
   let t = 1_000_000;
   const store = new BinStore({ now: () => t });
   const { base, close } = await start({ store });
   const bin = await newBin(base);
+  await fetch(bin.url, { method: 'POST', body: 'one' });
   t += LIMITS.idleMs - 1;
-  assert.equal((await fetch(`${base}/api/bins/${bin.id}`)).status, 200);
+  assert.equal((await (await fetch(`${base}/api/bins/${bin.id}`)).json()).requests.length, 1);
   t += LIMITS.idleMs;
-  assert.equal((await fetch(`${base}/api/bins/${bin.id}`)).status, 404);
+  const later = await fetch(`${base}/api/bins/${bin.id}`);
+  assert.equal(later.status, 200);
+  assert.equal((await later.json()).requests.length, 0);
   await close();
+});
+
+test('a URL survives a restart: the new process records to the same ID', async () => {
+  const first = await start();
+  const bin = await newBin(first.base);
+  await first.close();
+  const second = await start();
+  const res = await fetch(`${second.base}/in/${bin.id}`, { method: 'POST', body: 'after restart' });
+  assert.equal(res.status, 200);
+  const got = await (await fetch(`${second.base}/api/bins/${bin.id}`)).json();
+  assert.equal(got.requests[0].body, 'after restart');
+  await second.close();
 });
 
 test('a bin keeps only its most recent requests', async () => {

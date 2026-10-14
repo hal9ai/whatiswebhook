@@ -23,7 +23,37 @@
   let failures = 0;
 
   const STORE_KEY = "wt-bin";
+  const HIST_KEY = (id) => `wt-hist-${id}`;
+  const HIST_BODY = 32 * 1024;
+  const HIST_TOTAL = 1.5 * 1024 * 1024;
   const enc = new TextEncoder();
+
+  /* ---------- History kept in this browser ----------
+     The server forgets a URL's requests after an hour without use, or when
+     the app sleeps. The page keeps its own copy, with long bodies cut. */
+  function loadHistory(id) {
+    try { return JSON.parse(localStorage.getItem(HIST_KEY(id)) || "[]"); } catch (e) { return []; }
+  }
+  function saveHistory() {
+    if (!bin) return;
+    const keep = [];
+    let total = 0;
+    for (const e of entries) {
+      let copy = e;
+      const body = e.body ?? e.bodyBase64 ?? "";
+      if (body.length > HIST_BODY) copy = { ...e, [e.body != null ? "body" : "bodyBase64"]: body.slice(0, HIST_BODY), truncated: true, keptShort: true };
+      const size = JSON.stringify(copy).length;
+      if (total + size > HIST_TOTAL) break;
+      total += size;
+      keep.push(copy);
+    }
+    try { localStorage.setItem(HIST_KEY(bin.id), JSON.stringify(keep)); } catch (e) { /* full or private mode */ }
+  }
+  function merge(a, b) {
+    const seen = new Map();
+    for (const e of [...a, ...b]) if (!seen.has(e.id) || seen.get(e.id).keptShort) seen.set(e.id, e);
+    return [...seen.values()].sort((x, y) => Date.parse(y.receivedAt) - Date.parse(x.receivedAt)).slice(0, 50);
+  }
 
   /* ---------- API ---------- */
   async function api(path, opts = {}) {
@@ -57,7 +87,7 @@
     urlField.value = b.url;
     $("[data-respond-status]").value = String(b.respond.status);
     $("[data-respond-delay]").value = String(b.respond.delayMs);
-    entries = b.requests.slice();
+    entries = merge(b.requests, loadHistory(b.id));
     selected = entries[0] ? entries[0].id : null;
     renderSamples();
     renderList();
@@ -73,7 +103,8 @@
     source = new EventSource(`/api/bins/${bin.id}/stream`);
     source.addEventListener("open", () => { failures = 0; setState("live"); });
     source.addEventListener("request", (ev) => { add(JSON.parse(ev.data)); });
-    source.addEventListener("expired", () => { source.close(); expired(); });
+    // The server dropped this URL's requests (memory pressure); the URL still works.
+    source.addEventListener("expired", () => { source.close(); setTimeout(connect, 2000); });
     source.addEventListener("error", () => {
       failures += 1;
       setState("connecting");
@@ -108,14 +139,15 @@
     if (follow) selected = entry.id;
     renderList(entry.id);
     if (follow) renderDetail();
+    saveHistory();
   }
 
   function setState(state, note) {
     dot.dataset.state = state;
     if (state === "live") {
       const mins = bin ? Math.max(0, Math.round((Date.parse(bin.expiresAt) - Date.now()) / 60000)) : 0;
-      statusText.textContent = `Listening${note ? ` (${note})` : ""}. This URL lasts an hour after its last use.`;
-      statusText.title = `Expires in about ${mins} min unless used`;
+      statusText.textContent = `Listening${note ? ` (${note})` : ""}. This page keeps your last 50 requests.`;
+      statusText.title = `The server forgets them about ${mins} min after the last activity`;
     } else if (state === "connecting") {
       statusText.textContent = "Reconnecting…";
     } else {
@@ -356,7 +388,7 @@
     if (secret && raw !== secret) out.append(el("p", "fineprint", "Spaces or line breaks around the secret were ignored. If your app reads the secret with them, its check will fail."));
     if (!secret) { out.append(el("p", "wt-sig-res is-bad", "Paste the signing secret first.")); return; }
     if (!(window.crypto && crypto.subtle)) { out.append(el("p", "wt-sig-res is-bad", "This browser has no Web Crypto API (it needs HTTPS).")); return; }
-    if (e.truncated) out.append(el("p", "wt-sig-res is-bad", "This body was cut at 256 KiB, so its signature can't match."));
+    if (e.truncated) out.append(el("p", "wt-sig-res is-bad", e.keptShort ? "Only the start of this body was kept in your browser, so its signature can't match." : "This body was cut at 256 KiB, so its signature can't match."));
     const r = await PROVIDERS[$("[data-sig-provider]").value].check(e, secret);
     if (r.why) { out.append(el("p", "wt-sig-res is-bad", r.why)); return; }
     out.append(el("p", `wt-sig-res ${r.ok ? "is-ok" : "is-bad"}`, r.ok ? "✓ Valid signature. This request came from someone who holds that secret, and the body wasn't changed." : "✗ No match. Wrong secret, wrong scheme, or the body was changed after signing."));
@@ -398,7 +430,7 @@
 
   $("[data-new-url]").addEventListener("click", () => {
     urlField.classList.remove("is-expired");
-    try { localStorage.removeItem(STORE_KEY); } catch (e) { /* ignore */ }
+    try { localStorage.removeItem(STORE_KEY); if (bin) localStorage.removeItem(HIST_KEY(bin.id)); } catch (e) { /* ignore */ }
     fresh();
   });
 
@@ -406,6 +438,7 @@
     if (!bin) return;
     try { await api(`/api/bins/${bin.id}/requests`, { method: "DELETE" }); } catch (e) { if (e.status === 404) return expired(); }
     entries = []; selected = null; renderList(); renderDetail();
+    try { localStorage.removeItem(HIST_KEY(bin.id)); } catch (e) { /* ignore */ }
   });
 
   const SAMPLE = { id: "evt_test_0001", type: "order.created", created: 0, data: { order: { id: 42, total: 19.99, currency: "EUR", items: [{ sku: "MUG-01", qty: 2 }] } } };

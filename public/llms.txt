@@ -20,7 +20,7 @@
 - [Webhook not working?](https://whatiswebhook.com/webhook-not-working.html): Where each provider shows its delivery log and how to redeliver, a status-code table, how to reproduce a failure, and fixes for missing, timed-out, duplicated, redirected and blocked deliveries.
 - [Verify webhook signatures](https://whatiswebhook.com/verify-webhook-signatures.html): HMAC explained with an interactive playground, the signature scheme of Stripe, GitHub, Slack, Shopify and Standard Webhooks, verified code in Node and Python, and common verification failures.
 - [Deploy a webhook receiver](https://whatiswebhook.com/deploy-webhook-receiver.html): What a production receiver needs, a complete dependency-free receiver with a Dockerfile, cold starts versus provider deadlines, and the deploy commands.
-- [Webhook tester](https://whatiswebhook.com/webhook-tester.html): Get a public URL that records every request for an hour after its last use, inspect headers and exact body bytes, check signatures in the browser, and replay a request to localhost with curl. Its API: POST /api/bins creates a URL; GET /api/bins/{id} lists captured requests.
+- [Webhook tester](https://whatiswebhook.com/webhook-tester.html): Get a public URL that records every request (kept on the server for up to an hour after the last activity; the page keeps the last 50), inspect headers and exact body bytes, check signatures in the browser, and replay a request to localhost with curl. Its API: POST /api/bins creates a URL; GET /api/bins/{id} lists captured requests.
 
 ## Optional
 

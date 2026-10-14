@@ -117,10 +117,10 @@ export function createServer({ store = new BinStore(), origin = process.env.PUBL
   const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
   async function capture(req, res, id, rest) {
-    const bin = store.get(id);
+    const bin = store.revive(id);
     if (!bin) {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', 'x-content-type-options': 'nosniff' });
-      res.end('No such webhook URL. It may have expired: bins last an hour after their last use. Get a new one at /webhook-tester.html\n');
+      res.end('Not a webhook URL. Get one at /webhook-tester.html\n');
       return;
     }
     if (!store.allowCapture(bin)) {
@@ -220,8 +220,13 @@ export function createServer({ store = new BinStore(), origin = process.env.PUBL
       const bin = store.create();
       return json(res, 201, publicBin(bin, store, originOf(req)));
     }
-    const bin = ID_PATTERN.test(parts[1]) ? store.get(parts[1]) : null;
-    if (!bin) return json(res, 404, { error: 'no such bin; it may have expired' });
+    // A forgotten bin comes back empty, so a URL keeps working across restarts.
+    const known = store.get(parts[1]);
+    if (!known && ID_PATTERN.test(parts[1]) && !allowCreate(clientIp(req))) {
+      return json(res, 429, { error: `at most ${BIN_CREATES_PER_HOUR} new URLs an hour` });
+    }
+    const bin = known ?? store.revive(parts[1]);
+    if (!bin) return json(res, 404, { error: 'no such bin' });
     if (parts.length === 2) {
       if (req.method === 'GET') {
         store.touch(bin);
