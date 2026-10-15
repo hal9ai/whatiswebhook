@@ -55,6 +55,7 @@ if [ -z "$url" ]; then
   url=$(echo "$project" | json subdomain.url)
   [ -n "$url" ] || { echo "Deployed, but no URL in the answer:"; echo "$project"; exit 0; }
 fi
+site=${SITE_URL:-https://whatiswebhook.com}
 echo
-echo "Live: $url"
-echo "Tester: ${url%/}/webhook-tester.html"
+echo "Live: $site (Cloudish URL: $url)"
+echo "Tester: ${site%/}/webhook-tester.html"
